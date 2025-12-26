@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Plus, MessageSquare, Trash2, Menu, X, Sparkles, LogOut, Facebook, ShieldCheck, Zap, Globe, RefreshCcw } from 'lucide-react';
+import { Send, Plus, MessageSquare, Trash2, Menu, X, Sparkles, LogOut, Facebook, ShieldCheck, Zap, Globe, RefreshCcw, Activity } from 'lucide-react';
 import { ChatSession, Message, UserProfile, Gender } from './types';
-import { streamChatResponse } from './services/geminiService';
+import { streamChatResponse, checkApiHealth } from './services/geminiService';
 
 const App: React.FC = () => {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -11,7 +11,7 @@ const App: React.FC = () => {
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [apiStatusText, setApiStatusText] = useState<string>('Ready');
+  const [apiStatusText, setApiStatusText] = useState<string>('Initializing...');
   const [connectionHealth, setConnectionHealth] = useState<'perfect' | 'warning' | 'error'>('perfect');
 
   // Onboarding States
@@ -22,7 +22,10 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const savedProfile = localStorage.getItem('utsho_profile');
-    if (savedProfile) setUserProfile(JSON.parse(savedProfile));
+    if (savedProfile) {
+      setUserProfile(JSON.parse(savedProfile));
+      autoRefreshStatus(); // Auto-check status on load
+    }
 
     const saved = localStorage.getItem('chat_sessions');
     if (saved) {
@@ -38,6 +41,18 @@ const App: React.FC = () => {
       createNewSession();
     }
   }, []);
+
+  const autoRefreshStatus = async () => {
+    setApiStatusText('Pinging Shared Pool...');
+    const isHealthy = await checkApiHealth();
+    if (isHealthy) {
+      setConnectionHealth('perfect');
+      setApiStatusText('Connection Optimized');
+    } else {
+      setConnectionHealth('error');
+      setApiStatusText('API Down/Missing');
+    }
+  };
 
   useEffect(() => {
     if (sessions.length > 0) {
@@ -56,6 +71,7 @@ const App: React.FC = () => {
     setUserProfile(profile);
     localStorage.setItem('utsho_profile', JSON.stringify(profile));
     createNewSession();
+    autoRefreshStatus();
   };
 
   const createNewSession = () => {
@@ -84,7 +100,6 @@ const App: React.FC = () => {
     const currentInput = inputText;
     setInputText('');
     setIsLoading(true);
-    setConnectionHealth('perfect');
 
     setSessions(prev => prev.map(s => {
       if (s.id === activeSessionId) {
@@ -119,7 +134,8 @@ const App: React.FC = () => {
       },
       () => {
         setIsLoading(false);
-        setApiStatusText('Active');
+        setApiStatusText('Connection Optimized');
+        setConnectionHealth('perfect');
       },
       (error) => {
         setIsLoading(false);
@@ -137,7 +153,7 @@ const App: React.FC = () => {
       },
       (status) => {
         setApiStatusText(status);
-        if (status.includes('unstable')) setConnectionHealth('warning');
+        if (status.includes('reconnecting')) setConnectionHealth('warning');
       }
     );
   };
@@ -197,7 +213,7 @@ const App: React.FC = () => {
           <div className={`flex flex-col gap-2 p-3 rounded-xl border transition-all ${connectionHealth === 'perfect' ? 'bg-emerald-500/5 border-emerald-500/10' : connectionHealth === 'warning' ? 'bg-amber-500/5 border-amber-500/10' : 'bg-red-500/5 border-red-500/10'}`}>
             <div className="flex items-center justify-between">
               <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Shared API Pool</span>
-              <RefreshCcw size={10} className={`text-zinc-500 ${isLoading ? 'animate-spin' : ''}`} />
+              <button onClick={autoRefreshStatus} className="p-1 hover:bg-zinc-800 rounded-md transition-colors"><RefreshCcw size={10} className={`text-zinc-500 ${isLoading ? 'animate-spin' : ''}`} /></button>
             </div>
             <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${connectionHealth === 'perfect' ? 'bg-emerald-500' : connectionHealth === 'warning' ? 'bg-amber-500' : 'bg-red-500'} shadow-[0_0_8px_currentColor]`} />
@@ -221,7 +237,7 @@ const App: React.FC = () => {
         <div className="p-4 border-t border-zinc-800 bg-zinc-900/50">
           <div className="flex items-center gap-3 p-2 rounded-xl">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white shadow-lg ${userProfile.gender === 'male' ? 'bg-indigo-600' : 'bg-pink-600'}`}>{userProfile.name[0].toUpperCase()}</div>
-            <div className="flex-1 min-w-0"><div className="text-sm font-bold truncate">{userProfile.name}</div><div className="text-[10px] text-zinc-500 uppercase tracking-widest">Utsho Member</div></div>
+            <div className="flex-1 min-w-0"><div className="text-sm font-bold truncate">{userProfile.name}</div><div className="text-[10px] text-zinc-500 uppercase tracking-widest">Utsho AI Member</div></div>
             <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="p-2 text-zinc-500 hover:text-red-400"><LogOut size={16} /></button>
           </div>
         </div>
@@ -304,7 +320,7 @@ const App: React.FC = () => {
             </button>
             <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 mt-4 opacity-40 hover:opacity-100 transition-opacity">
                <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-[0.2em] flex items-center gap-1.5">
-                <ShieldCheck size={10} className="text-emerald-500" /> Secure Connection
+                <ShieldCheck size={10} className="text-emerald-500" /> Auto-Refreshing API
                </span>
                <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-[0.2em] flex items-center gap-1.5">
                 <Globe size={10} className="text-indigo-400" /> Shared Public Pool

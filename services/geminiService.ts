@@ -33,8 +33,27 @@ CRITICAL IDENTITY INFORMATION:
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
+ * Automatically checks if the shared API is responding correctly.
+ */
+export const checkApiHealth = async (): Promise<boolean> => {
+  try {
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) return false;
+    const ai = new GoogleGenAI({ apiKey });
+    // Simple ping to check if the model is reachable
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: 'ping',
+    });
+    return !!response.text;
+  } catch (e) {
+    console.error("Health check failed", e);
+    return false;
+  }
+};
+
+/**
  * Sends a message using a fresh API instance every time.
- * This ensures that even if one connection 'expires' or hangs, the next one is clean.
  */
 export const streamChatResponse = async (
   history: Message[],
@@ -52,13 +71,10 @@ export const streamChatResponse = async (
       throw new Error("API_KEY_MISSING: The shared API key is not configured in the environment.");
     }
 
-    // 1. FRESH CLIENT CREATION
-    // We do NOT reuse a global 'ai' object. We create a new one to force a new session.
-    onStatusChange(`Establishing Fresh Connection (Attempt ${retryCount + 1})...`);
+    // FRESH CLIENT CREATION: Auto-update/refresh connection every time
+    onStatusChange(`Refreshing API Connection (Attempt ${retryCount + 1})...`);
     const ai = new GoogleGenAI({ apiKey });
 
-    // 2. CONTEXT TRUNCATION
-    // Keep history lean to prevent token overflow on free tier
     const recentHistory = history.length > 15 ? history.slice(-15) : history;
 
     const sdkHistory = recentHistory.slice(0, -1).map(msg => ({
@@ -66,21 +82,19 @@ export const streamChatResponse = async (
       parts: [{ text: msg.content }]
     }));
 
-    // 3. MODEL INITIALIZATION
     const chat = ai.chats.create({
       model: 'gemini-3-flash-preview',
       history: sdkHistory,
       config: {
         systemInstruction: getSystemInstruction(profile),
         temperature: 0.85,
-        topP: 0.95,
       },
     });
 
     const lastUserMessage = history[history.length - 1].content;
     const streamResponse = await chat.sendMessageStream({ message: lastUserMessage });
     
-    onStatusChange("Receiving Data...");
+    onStatusChange("Receiving...");
     let fullText = '';
     for await (const chunk of streamResponse) {
       const c = chunk as GenerateContentResponse;
@@ -91,22 +105,19 @@ export const streamChatResponse = async (
     
     onComplete(fullText);
   } catch (error: any) {
-    console.error(`[API ERROR] Attempt ${retryCount + 1}:`, error);
-
     const isRateLimit = error?.message?.includes('429');
-    const isNetworkError = error?.message?.includes('fetch') || error?.message?.includes('Network');
+    const isNetwork = error?.message?.toLowerCase().includes('fetch') || error?.message?.toLowerCase().includes('network');
 
-    // 4. AUTO-RECOVERY LOGIC
-    if ((isRateLimit || isNetworkError) && retryCount < MAX_RETRIES) {
+    if ((isRateLimit || isNetwork) && retryCount < MAX_RETRIES) {
       const delay = INITIAL_RETRY_DELAY * Math.pow(2, retryCount);
-      onStatusChange(`Connection unstable. Auto-refreshing in ${delay/1000}s...`);
+      onStatusChange(`Shared pool busy. Auto-reconnecting in ${delay/1000}s...`);
       await sleep(delay);
       return streamChatResponse(history, profile, onChunk, onComplete, onError, onStatusChange, retryCount + 1);
     }
 
     const friendlyError = isRateLimit 
-      ? "The shared API is currently at its limit. Please wait a minute and try again."
-      : "I'm having trouble connecting to the network. Please try again later.";
+      ? "API pool is exhausted. Please wait a minute."
+      : (error?.message || "Connection failed.");
     
     onError(new Error(friendlyError));
   }
