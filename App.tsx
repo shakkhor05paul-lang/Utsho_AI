@@ -412,7 +412,7 @@ const App: React.FC = () => {
                 className="flex items-center gap-1.5 text-zinc-400 hover:text-indigo-400 transition-colors text-xs font-medium"
               >
                 <Facebook size={12} className="text-indigo-500" />
-                Shakkhor
+                Shakkhor Paul
               </a>
             </footer>
           </div>
