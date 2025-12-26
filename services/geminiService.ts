@@ -35,10 +35,24 @@ export const streamChatResponse = async (
   onError: (error: any) => void
 ) => {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const apiKey = process.env.API_KEY;
+    
+    if (!apiKey || apiKey === 'undefined') {
+      throw new Error("API_KEY is missing. Please ensure it is set in your environment variables/deployment settings.");
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
+
+    // Convert our internal message format to the SDK history format
+    // We take all messages except the last one (which is the current user input)
+    const sdkHistory = history.slice(0, -1).map(msg => ({
+      role: msg.role === 'user' ? 'user' : 'model' as any,
+      parts: [{ text: msg.content }]
+    }));
 
     const chat = ai.chats.create({
       model: 'gemini-3-flash-preview',
+      history: sdkHistory,
       config: {
         systemInstruction: getSystemInstruction(profile),
       },
@@ -56,8 +70,8 @@ export const streamChatResponse = async (
     }
     
     onComplete(fullText);
-  } catch (error) {
-    console.error("Gemini API Error:", error);
+  } catch (error: any) {
+    console.error("Gemini API Error Detail:", error);
     onError(error);
   }
 };

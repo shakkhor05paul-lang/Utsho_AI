@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Plus, MessageSquare, Trash2, Menu, X, Sparkles, Heart, User, LogOut, Facebook } from 'lucide-react';
+import { Send, Plus, MessageSquare, Trash2, Menu, X, Sparkles, Heart, User, LogOut, Facebook, AlertCircle } from 'lucide-react';
 import { ChatSession, Message, UserProfile, Gender } from './types';
 import { streamChatResponse } from './services/geminiService';
 
@@ -156,13 +156,17 @@ const App: React.FC = () => {
         }));
       },
       () => setIsLoading(false),
-      () => {
+      (error) => {
         setIsLoading(false);
+        const errorMsg = error?.message || "Something went wrong. Please try again.";
         setSessions(prev => prev.map(s => {
           if (s.id === activeSessionId) {
             return {
               ...s,
-              messages: s.messages.map(m => m.id === aiMessageId ? { ...m, content: "⚠️ Something went wrong. Please try again." } : m)
+              messages: s.messages.map(m => m.id === aiMessageId ? { 
+                ...m, 
+                content: `⚠️ Error: ${errorMsg}` 
+              } : m)
             };
           }
           return s;
@@ -357,7 +361,9 @@ const App: React.FC = () => {
                     ${message.role === 'user' 
                       ? (userProfile.gender === 'male' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/10' : 'bg-pink-600 text-white shadow-lg shadow-pink-900/10')
                       : 'bg-zinc-900 text-zinc-200 border border-zinc-800 shadow-sm'}
+                    ${message.content.startsWith('⚠️ Error:') ? 'border-red-500/50 bg-red-500/10 text-red-200' : ''}
                   `}>
+                    {message.content.startsWith('⚠️ Error:') && <AlertCircle size={14} className="inline mr-2 mb-0.5 text-red-400" />}
                     {message.content || (isLoading && <div className="flex gap-1 py-1"><div className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce"></div><div className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce [animation-delay:0.2s]"></div><div className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce [animation-delay:0.4s]"></div></div>)}
                   </div>
                   {message.role === 'user' && (
