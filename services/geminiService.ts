@@ -29,10 +29,15 @@ CRITICAL IDENTITY INFORMATION:
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const fetchFreshKey = async (): Promise<void> => {
-  // Initialize Key Pool from Environment
-  // Support comma separated keys: "KEY1,KEY2,KEY3"
-  const envKeys = (process.env.API_KEY || "").split(',').map(k => k.trim()).filter(k => k);
-  keyPool = envKeys;
+  try {
+    const envKeys = (process.env.API_KEY || "").split(',').map(k => k.trim()).filter(k => k);
+    keyPool = envKeys;
+    if (keyPool.length === 0) {
+      console.warn("Utsho AI: No API keys found in environment variables.");
+    }
+  } catch (err) {
+    console.error("Utsho AI: Error parsing API_KEY pool", err);
+  }
 };
 
 const getActiveKey = (profile?: UserProfile): string => {
@@ -49,9 +54,11 @@ export const checkApiHealth = async (customKey?: string): Promise<boolean> => {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: 'ping',
+      config: { thinkingConfig: { thinkingBudget: 0 } }
     });
     return !!response.text;
   } catch (e) {
+    console.error("Health check failed:", e);
     return false;
   }
 };
@@ -69,7 +76,7 @@ export const streamChatResponse = async (
     const apiKey = getActiveKey(profile);
     
     if (!apiKey) {
-      throw new Error("API_KEY_MISSING: Shared pool is empty. Please set API_KEY in environment.");
+      throw new Error("API_KEY_MISSING: The shared API key pool is empty. Set API_KEY in Cloudflare build settings.");
     }
 
     const mode = profile.customApiKey ? "Personal Mode" : `Shared Node #${(currentKeyIndex % keyPool.length) + 1}`;
@@ -78,7 +85,7 @@ export const streamChatResponse = async (
     const ai = new GoogleGenAI({ apiKey });
     const recentHistory = history.length > 15 ? history.slice(-15) : history;
     const sdkHistory = recentHistory.slice(0, -1).map(msg => ({
-      role: msg.role === 'user' ? 'user' : 'model' as any,
+      role: (msg.role === 'user' ? 'user' : 'model') as any,
       parts: [{ text: msg.content }]
     }));
 
@@ -88,6 +95,7 @@ export const streamChatResponse = async (
       config: {
         systemInstruction: getSystemInstruction(profile),
         temperature: 0.8,
+        thinkingConfig: { thinkingBudget: 0 }, // Disable thinking for faster user experience
       },
     });
 
@@ -105,18 +113,17 @@ export const streamChatResponse = async (
     
     onComplete(fullText);
   } catch (error: any) {
+    console.error("Gemini stream error:", error);
     const errorStr = error?.message || "";
-    const isRateLimit = errorStr.includes('429') || errorStr.includes('quota');
+    const isRateLimit = errorStr.includes('429') || errorStr.includes('quota') || errorStr.includes('limit');
     
-    // If we hit a rate limit on a shared key, rotate to the next one
-    if (isRateLimit && !profile.customApiKey && keyPool.length > 1) {
+    if (isRateLimit && !profile.customApiKey && keyPool.length > 1 && retryCount < keyPool.length) {
       currentKeyIndex++;
       onStatusChange(`Node Busy. Rotating to Node #${(currentKeyIndex % keyPool.length) + 1}...`);
       await sleep(500);
-      return streamChatResponse(history, profile, onChunk, onComplete, onError, onStatusChange, retryCount);
+      return streamChatResponse(history, profile, onChunk, onComplete, onError, onStatusChange, retryCount + 1);
     }
 
-    // Standard exponential backoff for other errors
     if (isRateLimit && retryCount < MAX_RETRIES) {
       const delay = INITIAL_RETRY_DELAY * Math.pow(2, retryCount);
       onStatusChange(`Rate Limited. Retrying in ${delay/1000}s...`);

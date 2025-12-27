@@ -13,8 +13,10 @@ A sleek chatbot powered by Gemini 3 Flash.
    - **Framework Preset**: `Vite`
    - **Build Command**: `npm run build`
    - **Output Directory**: `dist`
-4. **Environment Variables**:
-   - Add `API_KEY` with your Google AI Studio key.
+4. **Environment Variables (CRITICAL)**:
+   - Add `API_KEY` under **Build settings** > **Environment variables**.
+   - For shared pooling, use: `KEY1,KEY2,KEY3...`
+   - **Note**: This value must be set *before* you trigger a deploy, as Vite bakes the key into the static files during the `build` process.
 5. **Finish**: Deploy!
 
 ## Local Development

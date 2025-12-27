@@ -169,7 +169,7 @@ const App: React.FC = () => {
           if (s.id === activeSessionId) {
             return {
               ...s,
-              messages: s.messages.map(m => m.id === aiMessageId ? { ...m, content: `⚠️ ${error.message}` } : m)
+              messages: s.messages.map(m => m.id === aiMessageId ? { ...m, content: `⚠️ ${error.message || 'Something went wrong'}` } : m)
             };
           }
           return s;
@@ -416,8 +416,8 @@ const App: React.FC = () => {
                     )}
                   </div>
                   
-                  <div className={`flex flex-col gap-1.5 max-w-[82%] sm:max-w-[75%] ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
-                    <div className={`p-4 rounded-2xl text-[15px] md:text-[16px] whitespace-pre-wrap break-words overflow-hidden bangla-text shadow-sm ${
+                  <div className={`flex flex-col gap-1.5 max-w-[85%] sm:max-w-[75%] ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
+                    <div className={`p-4 rounded-2xl text-[15px] md:text-[16px] whitespace-pre-wrap [overflow-wrap:anywhere] [word-break:break-all] bangla-text shadow-sm w-fit max-w-full ${
                       m.role === 'user' 
                         ? (userProfile.gender === 'male' ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-pink-600 text-white rounded-tr-none') 
                         : 'bg-zinc-900 border border-zinc-800 text-zinc-100 rounded-tl-none'
@@ -465,7 +465,7 @@ const App: React.FC = () => {
                 style={{ height: 'auto' }}
               />
               <button
-                onClick={() => { handleSendMessage(); if (messagesEndRef.current) messagesEndRef.current.scrollIntoView(); }}
+                onClick={() => { handleSendMessage(); }}
                 disabled={!inputText.trim() || isLoading}
                 className={`p-3 rounded-full transition-all shrink-0 active:scale-90 ${inputText.trim() && !isLoading ? (userProfile.gender === 'male' ? 'bg-indigo-600 text-white hover:bg-indigo-500' : 'bg-pink-600 text-white hover:bg-pink-500') : 'bg-zinc-800 text-zinc-600 cursor-not-allowed'}`}
               >
