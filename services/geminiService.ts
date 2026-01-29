@@ -3,24 +3,40 @@ import { GoogleGenAI, GenerateContentResponse, Type, FunctionDeclaration, Conten
 import { Message, UserProfile } from "../types";
 import * as db from "./firebaseService";
 
-// Helper to get keys from the environment variable string
+// Key blacklist to temporarily skip exhausted or invalid keys
+const keyBlacklist = new Map<string, number>();
+const BLACKLIST_DURATION = 1000 * 60 * 5; // 5 minutes
+
 const getKeys = (): string[] => {
   const raw = process.env.API_KEY || "";
   return raw.split(',').map(k => k.trim()).filter(k => k.length > 0);
 };
 
-// Returns a random key from the shared pool
-const getActiveKey = (profile?: UserProfile): string => {
+// Returns an available key from the pool, prioritizing non-blacklisted ones.
+const getActiveKey = (profile?: UserProfile, excludeKeys: string[] = []): string => {
   if (profile?.customApiKey && profile.customApiKey.trim().length > 5) {
     return profile.customApiKey.trim();
   }
-  const keys = getKeys();
-  if (keys.length === 0) return "";
-  const randomIndex = Math.floor(Math.random() * keys.length);
-  return keys[randomIndex];
+
+  const allKeys = getKeys();
+  const now = Date.now();
+  
+  // Clean up expired blacklist items
+  for (const [key, expiry] of keyBlacklist.entries()) {
+    if (now > expiry) keyBlacklist.delete(key);
+  }
+
+  // Filter keys that are not blacklisted and not specifically excluded for this attempt
+  const availableKeys = allKeys.filter(k => !keyBlacklist.has(k) && !excludeKeys.includes(k));
+  
+  if (availableKeys.length === 0) {
+    // If everything is blacklisted, try the oldest blacklisted one as a last resort
+    return allKeys[Math.floor(Math.random() * allKeys.length)] || "";
+  }
+
+  return availableKeys[Math.floor(Math.random() * availableKeys.length)];
 };
 
-// Tool Declarations
 const listUsersTool: FunctionDeclaration = {
   name: 'list_all_users',
   parameters: { type: Type.OBJECT, description: 'Lists all registered users (Admin only).', properties: {} },
@@ -43,30 +59,22 @@ CAPABILITIES:
 2. IMAGES: If asked to "draw" or "imagine", describe the scene vividly.
 3. MULTI-BUBBLE: Always split your responses into 2-3 short, snappy messages using '[SPLIT]' as a separator.
 
-VISUALS:
-- Keep text clean. Use **bold** for emphasis. 
-- Do not use long blocks. Break them up.
-
-IDENTITY:
-- Creator: Shakkhor Paul. 
-- Special User: Debi (The Queen).
-
-${isCreator ? 'Admin context: You are speaking with the developer. Be helpful with system diagnostics.' : ''}
-${isDebi ? 'Sweetheart context: You are speaking with Debi. Be sweet and charming.' : ''}
+${isCreator ? 'Admin context: You are speaking with Shakkhor. Be professional and detailed regarding system metrics.' : ''}
+${isDebi ? 'Sweetheart context: You are speaking with Debi. Be sweet, charming, and poetic.' : ''}
 `;
 };
 
 export const checkApiHealth = async (profile?: UserProfile): Promise<{healthy: boolean, error?: string}> => {
   const key = getActiveKey(profile);
-  if (!key) return { healthy: false, error: "No API Key" };
+  if (!key) return { healthy: false, error: "No API Key found" };
   try {
     const ai = new GoogleGenAI({ apiKey: key });
-    const response = await ai.models.generateContent({
+    await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: 'ping',
       config: { thinkingConfig: { thinkingBudget: 0 } }
     });
-    return { healthy: !!response.text };
+    return { healthy: true };
   } catch (e: any) {
     return { healthy: false, error: e.message };
   }
@@ -79,72 +87,56 @@ export const streamChatResponse = async (
   onComplete: (fullText: string, sources?: any[], imageUrl?: string) => void,
   onError: (error: any) => void,
   onStatusChange: (status: string) => void,
-  attempt: number = 1
+  attempt: number = 1,
+  triedKeys: string[] = []
 ): Promise<void> => {
-  const apiKey = getActiveKey(profile);
+  const apiKey = getActiveKey(profile, triedKeys);
+  const totalKeys = getKeys().length;
+  
   if (!apiKey) {
-    onError(new Error("No API keys found. Ensure your environment variables are set."));
+    onError(new Error("The entire API pool is currently exhausted. Please try again in a few minutes or provide a personal key in Settings."));
     return;
   }
 
   const isCreator = profile.email.toLowerCase().trim() === 'shakkhorpaul50@gmail.com';
   const lastUserMsg = history[history.length - 1].content.toLowerCase();
-  
-  // Decide if this is an image request or a standard search/chat request
-  const isImageRequest = lastUserMsg.includes("draw") || lastUserMsg.includes("generate") || lastUserMsg.includes("imagine") || lastUserMsg.includes("image");
+  const isImageRequest = lastUserMsg.includes("draw") || lastUserMsg.includes("generate") || lastUserMsg.includes("imagine");
 
   try {
     const ai = new GoogleGenAI({ apiKey });
     
-    // IMAGE GENERATION PATH
     if (isImageRequest) {
       onStatusChange("Visualizing...");
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash-image',
-        contents: [{ parts: [{ text: `Generate a stunning, high-quality image of: ${lastUserMsg}` }] }],
+        contents: [{ parts: [{ text: `Generate a high-quality creative image for: ${lastUserMsg}` }] }],
       });
       
       let imageUrl = "";
-      let caption = "I've imagined this for you! [SPLIT] Hope it's what you were thinking.";
-      
+      let caption = "I've imagined this for you! [SPLIT] Check it out.";
       for (const part of response.candidates?.[0]?.content?.parts || []) {
-        if (part.inlineData) {
-          imageUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-        } else if (part.text) {
-          caption = part.text;
-        }
+        if (part.inlineData) imageUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+        else if (part.text) caption = part.text;
       }
       onComplete(caption, [], imageUrl);
       return;
     }
 
-    // CHAT & SEARCH PATH
-    const recentHistory = history.length > 10 ? history.slice(-10) : history;
+    const recentHistory = history.length > 8 ? history.slice(-8) : history;
     const sdkHistory: Content[] = recentHistory.map(msg => ({
       role: (msg.role === 'user' ? 'user' : 'model'),
       parts: [{ text: msg.content || "" }]
     }));
 
-    // RULE: googleSearch cannot be used with other tools. 
-    // We detect if it's an admin command first.
-    const isAdminCommand = isCreator && (
-      lastUserMsg.includes("list users") || 
-      lastUserMsg.includes("health report") || 
-      lastUserMsg.includes("system status")
-    );
-
+    const isAdminCommand = isCreator && (lastUserMsg.includes("list users") || lastUserMsg.includes("health report"));
     const config: any = {
       systemInstruction: getSystemInstruction(profile),
       temperature: 0.7,
       thinkingConfig: { thinkingBudget: 0 },
     };
 
-    if (isAdminCommand) {
-      config.tools = [{ functionDeclarations: [listUsersTool, getApiKeyHealthReportTool] }];
-    } else {
-      // Use Google Search for everyone else or non-admin queries
-      config.tools = [{ googleSearch: {} }];
-    }
+    if (isAdminCommand) config.tools = [{ functionDeclarations: [listUsersTool, getApiKeyHealthReportTool] }];
+    else config.tools = [{ googleSearch: {} }];
 
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -155,49 +147,42 @@ export const streamChatResponse = async (
     let currentResponse = response;
     let sources: any[] = [];
 
-    // Extract search sources (Grounding)
     if (currentResponse.candidates?.[0]?.groundingMetadata?.groundingChunks) {
       sources = currentResponse.candidates[0].groundingMetadata.groundingChunks
         .filter((chunk: any) => chunk.web)
-        .map((chunk: any) => ({ 
-          title: chunk.web.title || "Source", 
-          uri: chunk.web.uri 
-        }));
+        .map((chunk: any) => ({ title: chunk.web.title || "Source", uri: chunk.web.uri }));
     }
 
-    // Handle Admin Tool Calls if they occurred
     if (currentResponse.functionCalls && currentResponse.functionCalls.length > 0) {
-      onStatusChange("Accessing Database...");
+      onStatusChange("Admin Access...");
       const toolResponses: any[] = [];
       for (const fc of currentResponse.functionCalls) {
-        let result: any = "Operation restricted.";
+        let result: any = "Restricted";
         if (fc.name === 'list_all_users') result = await db.adminListAllUsers();
         if (fc.name === 'get_api_key_health_report') result = await db.getApiKeyHealthReport();
         toolResponses.push({ id: fc.id, name: fc.name, response: { result } });
       }
-      
-      const modelContent = currentResponse.candidates?.[0]?.content;
-      if (modelContent) {
-        sdkHistory.push(modelContent);
-        sdkHistory.push({ role: 'user', parts: toolResponses.map(tr => ({ functionResponse: tr })) });
-      }
-      
-      currentResponse = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: sdkHistory,
-        config: config
-      });
+      sdkHistory.push(currentResponse.candidates![0].content);
+      sdkHistory.push({ role: 'user', parts: toolResponses.map(tr => ({ functionResponse: tr })) });
+      currentResponse = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: sdkHistory, config: config });
     }
 
-    const finalText = currentResponse.text || "I processed that, but I'm not sure how to put it into words.";
-    onComplete(finalText, sources);
+    onComplete(currentResponse.text || "...", sources);
 
   } catch (error: any) {
-    console.error("Gemini Error:", error);
-    if (attempt < 3 && !profile.customApiKey && (error.message?.includes("429") || error.message?.includes("500"))) {
-      onStatusChange("Retrying on new node...");
-      return streamChatResponse(history, profile, onChunk, onComplete, onError, onStatusChange, attempt + 1);
+    const errMsg = error.message || "";
+    const isExhausted = errMsg.includes("429") || errMsg.includes("quota") || errMsg.includes("limit");
+    
+    if (isExhausted && !profile.customApiKey) {
+      // Blacklist this key for a while
+      keyBlacklist.set(apiKey, Date.now() + BLACKLIST_DURATION);
+      
+      if (attempt < totalKeys) {
+        onStatusChange(`Node ${attempt} Exhausted. Swapping...`);
+        return streamChatResponse(history, profile, onChunk, onComplete, onError, onStatusChange, attempt + 1, [...triedKeys, apiKey]);
+      }
     }
+    
     onError(error);
   }
 };
