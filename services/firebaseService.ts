@@ -60,11 +60,13 @@ export const loginWithGoogle = async (): Promise<UserProfile | null> => {
   const user = result.user;
 
   if (user && user.email) {
+    // FIX: Added missing required 'age' property to satisfy UserProfile interface
     return {
       name: user.displayName || 'User',
       email: user.email,
       picture: user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}&background=4f46e5&color=fff`,
       gender: 'male', // Default, can be changed later
+      age: 20, // Default age value as it is required by the UserProfile interface
       googleId: user.uid
     };
   }
@@ -74,10 +76,12 @@ export const loginWithGoogle = async (): Promise<UserProfile | null> => {
 export const saveUserProfile = async (profile: UserProfile) => {
   if (!db || !profile.email) return;
   const userRef = doc(db, 'users', profile.email);
+  // FIX: Added 'age' to the document to ensure it's persisted in Firestore
   await setDoc(userRef, {
     name: profile.name,
     email: profile.email,
     gender: profile.gender,
+    age: profile.age,
     picture: profile.picture,
     customApiKey: profile.customApiKey || '',
     googleId: profile.googleId || ''

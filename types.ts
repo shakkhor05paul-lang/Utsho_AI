@@ -7,6 +7,7 @@ export interface UserProfile {
   email: string;
   picture?: string;
   gender: Gender;
+  age: number;
   customApiKey?: string;
   googleId?: string;
 }
