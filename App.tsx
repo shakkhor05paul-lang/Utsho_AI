@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Plus, MessageSquare, Trash2, Menu, Sparkles, LogOut, RefreshCcw, Settings, ExternalLink, Globe, AlertCircle, Activity, Paperclip, X } from 'lucide-react';
+import { Send, Plus, MessageSquare, Trash2, Menu, Sparkles, LogOut, RefreshCcw, Settings, ExternalLink, Globe, AlertCircle, Activity, Paperclip, X, Facebook, Instagram } from 'lucide-react';
 import { ChatSession, Message, UserProfile, Gender } from './types';
 import { streamChatResponse, checkApiHealth, getPoolStatus, adminResetPool, getLastNodeError } from './services/geminiService';
 import * as db from './services/firebaseService';
@@ -322,13 +322,29 @@ const App: React.FC = () => {
           ))}
         </div>
 
-        <div className="p-4 border-t border-zinc-800 flex items-center gap-3 bg-zinc-900/50">
-          <img src={userProfile?.picture} className="w-9 h-9 rounded-full border border-zinc-700 shadow-sm" alt="" />
-          <div className="flex-1 truncate text-[11px] font-bold text-zinc-400 leading-tight">
-            {userProfile?.name} <br/> 
-            <span className="text-[9px] text-zinc-600 uppercase tracking-widest">{userProfile?.age}Y • {userProfile?.gender}</span>
+        <div className="p-4 border-t border-zinc-800 flex flex-col gap-3 bg-zinc-900/50">
+          <div className="flex items-center gap-3">
+            <img src={userProfile?.picture} className="w-9 h-9 rounded-full border border-zinc-700 shadow-sm" alt="" />
+            <div className="flex-1 truncate text-[11px] font-bold text-zinc-400 leading-tight">
+              {userProfile?.name} <br/> 
+              <span className="text-[9px] text-zinc-600 uppercase tracking-widest">{userProfile?.age}Y • {userProfile?.gender}</span>
+            </div>
+            <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="text-zinc-600 hover:text-red-500 transition-colors"><LogOut size={16} /></button>
           </div>
-          <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="text-zinc-600 hover:text-red-500 transition-colors"><LogOut size={16} /></button>
+          
+          <div className="pt-2 border-t border-zinc-800/50 flex flex-col items-center gap-2">
+            <div className="flex items-center gap-4">
+              <a href="https://www.facebook.com/shakkhor12102005" target="_blank" rel="noopener noreferrer" className="text-zinc-500 hover:text-indigo-500 transition-colors">
+                <Facebook size={16} />
+              </a>
+              <a href="https://www.instagram.com/shakkhor_paul/" target="_blank" rel="noopener noreferrer" className="text-zinc-500 hover:text-pink-500 transition-colors">
+                <Instagram size={16} />
+              </a>
+            </div>
+            <div className="text-[9px] font-bold text-zinc-600 uppercase tracking-widest text-center">
+              Developed by Shakkhor Paul
+            </div>
+          </div>
         </div>
       </aside>
 
