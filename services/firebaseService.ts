@@ -14,6 +14,12 @@ import {
   Timestamp,
   Firestore
 } from 'firebase/firestore';
+import { 
+  getAuth, 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  Auth 
+} from 'firebase/auth';
 import { UserProfile, ChatSession, Message } from '../types';
 
 const firebaseConfig = {
@@ -25,14 +31,18 @@ const firebaseConfig = {
   appId: process.env.FIREBASE_APP_ID
 };
 
+const ADMIN_EMAIL = 'shakkhorpaul50@gmail.com';
+
 const isConfigValid = !!firebaseConfig.apiKey && !!firebaseConfig.projectId;
 
 let db: Firestore | null = null;
+let auth: Auth | null = null;
 
 if (isConfigValid) {
   try {
     const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
     db = getFirestore(app);
+    auth = getAuth(app);
   } catch (err) {
     console.error("Firebase initialization failed:", err);
   }
@@ -41,6 +51,25 @@ if (isConfigValid) {
 }
 
 export const isDatabaseEnabled = () => !!db;
+export const isAdmin = (email: string) => email.toLowerCase().trim() === ADMIN_EMAIL;
+
+export const loginWithGoogle = async (): Promise<UserProfile | null> => {
+  if (!auth) throw new Error("Auth not initialized");
+  const provider = new GoogleAuthProvider();
+  const result = await signInWithPopup(auth, provider);
+  const user = result.user;
+
+  if (user && user.email) {
+    return {
+      name: user.displayName || 'User',
+      email: user.email,
+      picture: user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}&background=4f46e5&color=fff`,
+      gender: 'male', // Default, can be changed later
+      googleId: user.uid
+    };
+  }
+  return null;
+};
 
 export const saveUserProfile = async (profile: UserProfile) => {
   if (!db || !profile.email) return;
@@ -50,7 +79,8 @@ export const saveUserProfile = async (profile: UserProfile) => {
     email: profile.email,
     gender: profile.gender,
     picture: profile.picture,
-    customApiKey: profile.customApiKey || ''
+    customApiKey: profile.customApiKey || '',
+    googleId: profile.googleId || ''
   }, { merge: true });
 };
 

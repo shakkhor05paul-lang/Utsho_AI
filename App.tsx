@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Plus, MessageSquare, Trash2, Menu, X, Sparkles, LogOut, Facebook, ShieldCheck, Zap, Globe, RefreshCcw, Settings, Key, ExternalLink, Mail, CheckCircle2, ArrowRight, Cloud, CloudOff, AlertTriangle } from 'lucide-react';
+import { Send, Plus, MessageSquare, Trash2, Menu, X, Sparkles, LogOut, Facebook, ShieldCheck, Zap, Globe, RefreshCcw, Settings, Key, ExternalLink, Mail, CheckCircle2, ArrowRight, Cloud, CloudOff, AlertTriangle, ShieldAlert } from 'lucide-react';
 import { ChatSession, Message, UserProfile, Gender } from './types';
 import { streamChatResponse, checkApiHealth, fetchFreshKey } from './services/geminiService';
 import * as db from './services/firebaseService';
@@ -64,6 +64,33 @@ const App: React.FC = () => {
 
     bootApp();
   }, []);
+
+  const handleGoogleLogin = async () => {
+    try {
+      setIsSyncing(true);
+      const profile = await db.loginWithGoogle();
+      if (profile) {
+        const existingCloudProfile = await db.getUserProfile(profile.email);
+        const finalProfile = existingCloudProfile ? { ...existingCloudProfile, ...profile } : profile;
+        
+        setUserProfile(finalProfile);
+        localStorage.setItem('utsho_profile', JSON.stringify(finalProfile));
+        await db.saveUserProfile(finalProfile);
+        
+        const cloudSessions = await db.getSessions(profile.email);
+        setSessions(cloudSessions);
+        if (cloudSessions.length > 0) setActiveSessionId(cloudSessions[0].id);
+        else createNewSession(profile.email);
+        
+        await performHealthCheck(finalProfile.customApiKey);
+      }
+    } catch (e) {
+      console.error("Google Login Error:", e);
+      alert("Google Login failed. Please check your Firebase settings.");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const finalizeOnboarding = async () => {
     if (!onboardingName || !onboardingEmail || !onboardingGender) return;
@@ -294,9 +321,25 @@ const App: React.FC = () => {
               <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
                 <div className="text-center space-y-2">
                   <h1 className="text-3xl font-bold tracking-tight">Utsho AI</h1>
-                  <p className="text-zinc-500 text-sm">Welcome back. Enter your email to begin.</p>
+                  <p className="text-zinc-500 text-sm">Welcome. Sign in to start chatting.</p>
                 </div>
+                
                 <div className="space-y-4">
+                  <button 
+                    onClick={handleGoogleLogin}
+                    disabled={!dbStatus || isSyncing}
+                    className="w-full bg-white text-zinc-950 font-bold py-4 rounded-2xl hover:bg-zinc-100 transition-all flex items-center justify-center gap-3 shadow-lg disabled:opacity-50 active:scale-[0.98]"
+                  >
+                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
+                    {isSyncing ? 'Signing in...' : 'Sign in with Google'}
+                  </button>
+
+                  <div className="flex items-center gap-4 my-6">
+                    <div className="flex-1 h-px bg-zinc-800" />
+                    <span className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest">Or Email</span>
+                    <div className="flex-1 h-px bg-zinc-800" />
+                  </div>
+
                   <div className="relative group">
                     <Mail className="absolute left-4 top-4 text-zinc-500 group-focus-within:text-indigo-400 transition-colors" size={20} />
                     <input 
@@ -310,7 +353,7 @@ const App: React.FC = () => {
                   <button 
                     onClick={() => setOnboardingStep(2)}
                     disabled={!onboardingEmail.includes('@')}
-                    className="w-full bg-zinc-100 text-zinc-950 font-bold py-4 rounded-2xl hover:bg-white transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                    className="w-full bg-zinc-800 text-zinc-100 border border-zinc-700 font-bold py-4 rounded-2xl hover:bg-zinc-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     Next Step <ArrowRight size={18} />
                   </button>
@@ -385,6 +428,7 @@ const App: React.FC = () => {
   }
 
   const activeSession = sessions.find(s => s.id === activeSessionId);
+  const isUserAdmin = db.isAdmin(userProfile.email);
 
   return (
     <div className="flex h-screen bg-zinc-950 text-zinc-100 overflow-hidden font-['Hind_Siliguri',_sans-serif]">
@@ -438,7 +482,10 @@ const App: React.FC = () => {
       <div className="md:hidden fixed top-0 left-0 right-0 h-14 bg-zinc-900/90 backdrop-blur-xl border-b border-zinc-800 z-40 flex items-center justify-between px-4">
         <button onClick={() => setIsSidebarOpen(true)} className="p-2 hover:bg-zinc-800 rounded-lg"><Menu size={20} /></button>
         <div className="flex flex-col items-center">
-          <span className="font-bold text-xs flex items-center gap-1"><Sparkles size={14} className="text-indigo-400" /> Utsho AI</span>
+          <span className="font-bold text-xs flex items-center gap-1">
+            <Sparkles size={14} className="text-indigo-400" /> Utsho AI
+            {isUserAdmin && <ShieldAlert size={12} className="text-amber-400" />}
+          </span>
           <span className="text-[8px] text-zinc-500 uppercase tracking-widest flex items-center gap-1">
             <div className={`w-1.5 h-1.5 rounded-full ${connectionHealth === 'perfect' ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : 'bg-red-500'}`} /> {apiStatusText}
           </span>
@@ -448,7 +495,9 @@ const App: React.FC = () => {
             <img src={userProfile.picture} className="w-8 h-8 rounded-full border border-zinc-700" alt="profile" />
             {(isSyncing || !dbStatus) && (
               <div className={`absolute -top-1 -right-1 rounded-full p-0.5 ${!dbStatus ? 'bg-red-600' : 'bg-indigo-600 animate-spin'}`}>
-                {!dbStatus ? <CloudOff size={8} /> : <RefreshCcw size={8} />}
+                <span title={!dbStatus ? "Database Disconnected" : "Syncing..."}>
+                  {!dbStatus ? <CloudOff size={8} /> : <RefreshCcw size={8} />}
+                </span>
               </div>
             )}
           </button>
@@ -508,9 +557,12 @@ const App: React.FC = () => {
             <div className="flex items-center gap-3 p-2.5 rounded-2xl bg-zinc-800/20 border border-zinc-800/50">
               <img src={userProfile.picture} className="w-10 h-10 rounded-full border border-zinc-700 shadow-md" alt="profile" />
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-bold truncate">{userProfile.name}</div>
+                <div className="text-sm font-bold truncate flex items-center gap-1">
+                   {userProfile.name}
+                   {isUserAdmin && <ShieldAlert size={12} className="text-amber-400 shrink-0" />}
+                </div>
                 <div className={`text-[9px] font-bold uppercase flex items-center gap-1 ${userProfile.gender === 'male' ? 'text-indigo-400' : 'text-pink-400'}`}>
-                  {userProfile.gender === 'male' ? 'Bro Mode' : 'Sweet Mode'}
+                  {isUserAdmin ? 'Lead Developer' : (userProfile.gender === 'male' ? 'Bro Mode' : 'Sweet Mode')}
                   <CheckCircle2 size={8} />
                 </div>
               </div>
@@ -533,9 +585,12 @@ const App: React.FC = () => {
                     </div>
                   </div>
                   <div className="space-y-4">
-                    <h2 className="text-4xl md:text-5xl font-black tracking-tight bangla-text bg-clip-text text-transparent bg-gradient-to-b from-white to-zinc-500">স্বাগতম, {userProfile.name.split(' ')[0]}!</h2>
+                    <h2 className="text-4xl md:text-5xl font-black tracking-tight bangla-text bg-clip-text text-transparent bg-gradient-to-b from-white to-zinc-500">
+                      স্বাগতম, {userProfile.name.split(' ')[0]}!
+                    </h2>
                     <p className="text-zinc-500 text-sm md:text-base max-w-sm mx-auto bangla-text leading-relaxed">
-                      আমি উৎস AI, আপনার সব প্রশ্নের উত্তর দিতে প্রস্তুত। {dbStatus ? "আপনার কথোপকথন এখন ক্লাউডে সেভ হবে।" : "বর্তমানে অফলাইন মোডে চলছে (ক্লাউড সিঙ্ক নেই)।"}
+                      আমি উৎস AI, আপনার সব প্রশ্নের উত্তর দিতে প্রস্তুত। 
+                      {isUserAdmin ? " সিস্টেম অ্যাডমিন হিসেবে অ্যাক্সেস গ্র্যান্ট করা হয়েছে।" : (dbStatus ? " আপনার কথোপকথন এখন ক্লাউডে সেভ হবে।" : " বর্তমানে অফলাইন মোডে চলছে (ক্লাউড সিঙ্ক নেই)।")}
                     </p>
                   </div>
                 </div>
