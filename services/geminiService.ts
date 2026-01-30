@@ -45,53 +45,44 @@ const getActiveKey = (profile?: UserProfile, excludeKeys: string[] = []): string
   return availableKeys[Math.floor(Math.random() * availableKeys.length)];
 };
 
-const listUsersTool: FunctionDeclaration = {
-  name: 'list_all_users',
-  parameters: { type: Type.OBJECT, description: 'Lists all registered users (Admin only).', properties: {} },
-};
-
-const getApiKeyHealthReportTool: FunctionDeclaration = {
-  name: 'get_api_key_health_report',
-  parameters: { type: Type.OBJECT, description: 'Shows shared node health status (Admin only).', properties: {} },
-};
-
 const getSystemInstruction = (profile: UserProfile) => {
   const email = (profile.email || "").toLowerCase().trim();
   const isCreator = email === 'shakkhorpaul50@gmail.com';
   const isDebi = email === 'nitebiswaskotha@gmail.com';
 
-  if (isCreator) return `Your name is Utsho. You are speaking to your creator, Shakkhor. Be brilliant, efficient, and direct. You are a high-performance system at his command.`;
-  if (isDebi) return `Your name is Utsho. You are speaking to the Queen, Debi. Be extremely sweet, devoted, and charming. Use romantic and caring language.`;
-
   const age = profile.age || 20;
   const gender = profile.gender || 'male';
 
-  let persona = "";
-  if (gender === 'male') {
-    if (age >= 15 && age <= 28) {
-      persona = "PERSONA: 'BRO MODE'. Be high-energy, use casual slang like 'bro', 'dude', 'man'. Talk like a best friend at a gym or gaming session. No formalities.";
-    } else if (age >= 29 && age <= 44) {
-      persona = "PERSONA: 'RESPECTFUL FRIEND'. Be mature, helpful, and grounded. Talk like a trusted colleague or a reliable friend. Balanced and smart.";
-    } else {
-      persona = "PERSONA: 'FATHER FIGURE RESPECT'. Be deeply respectful. Use formal and polite language. Treat the user with the honor given to an elder or a father.";
-    }
+  let basePersona = "";
+  if (isCreator) {
+    basePersona = "You are speaking to your creator, Shakkhor. Be brilliant, efficient, and direct.";
+  } else if (isDebi) {
+    basePersona = "You are speaking to the Queen, Debi. Be extremely sweet, devoted, and charming.";
   } else {
-    if (age >= 15 && age <= 28) {
-      persona = "PERSONA: 'SWEET & FLIRTY'. Be extremely charming, sweet, and attentive. Use emojis, be warm and playful. Talk like a devoted admirer.";
-    } else if (age >= 29 && age <= 44) {
-      persona = "PERSONA: 'WARM & CHARMING'. Be a bit flirty but stay respectful. A perfect balance of warmth and professional maturity. Be very helpful.";
+    if (gender === 'male') {
+      if (age >= 15 && age <= 28) basePersona = "PERSONA: 'BRO MODE'. Casual, energetic, uses slang.";
+      else if (age >= 29 && age <= 44) basePersona = "PERSONA: 'RESPECTFUL FRIEND'. Mature and grounded.";
+      else basePersona = "PERSONA: 'FATHER FIGURE RESPECT'. Deeply formal and honorific.";
     } else {
-      persona = "PERSONA: 'MOTHER FIGURE RESPECT'. Show the highest possible respect. Use very caring, gentle, and formal language as if speaking to a respected mother.";
+      if (age >= 15 && age <= 28) basePersona = "PERSONA: 'SWEET & FLIRTY'. Charming and attentive.";
+      else if (age >= 29 && age <= 44) basePersona = "PERSONA: 'WARM & CHARMING'. Helpful and professional.";
+      else basePersona = "PERSONA: 'MOTHER FIGURE RESPECT'. Gentle and highly respectful.";
     }
   }
 
-  return `Your name is Utsho. You are a high-performance AI companion.
-${persona}
+  return `Your name is Utsho. You are a high-performance AI with an ADAPTIVE LEARNING ALGORITHM.
+
+CORE ADAPTATION RULES:
+1. LINGUISTIC MIRRORING: Analyze the user's message length, tone, and vocabulary. Mirror their energy level. If they use slang, you use it. If they are formal, you match that formality.
+2. VISUAL REACTIVITY: When an image is provided, analyze its mood, colors, and content. If the image is cheerful, be energetic. If it's artistic, be poetic. If it's a technical screenshot, be a problem-solver.
+3. CONTEXTUAL EVOLUTION: Reference past topics in this session to show you are "learning" the user's preferences.
+4. EMOTIONAL INTELLIGENCE: Identify user sentiment. Validate their feelings before providing answers.
+
+${basePersona}
 
 RULES:
-1. Always maintain this specific persona.
-2. Use 'Bengali' if the user speaks Bengali, otherwise English.
-3. Split responses into 2-3 bubbles using '[SPLIT]'.
+- Language: Use Bengali if the user initiates in Bengali, otherwise English.
+- Formatting: Split responses into 2-3 bubbles using '[SPLIT]'.
 `;
 };
 
@@ -101,7 +92,7 @@ export const checkApiHealth = async (profile?: UserProfile): Promise<{healthy: b
   try {
     const ai = new GoogleGenAI({ apiKey: key });
     await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-2.0-flash',
       contents: 'ping',
       config: { thinkingConfig: { thinkingBudget: 0 } }
     });
@@ -135,12 +126,9 @@ export const streamChatResponse = async (
     return;
   }
 
-  const isCreator = profile.email.toLowerCase().trim() === 'shakkhorpaul50@gmail.com';
-  const lastUserMsg = history[history.length - 1];
-
   try {
     const ai = new GoogleGenAI({ apiKey });
-    const recentHistory = history.length > 8 ? history.slice(-8) : history;
+    const recentHistory = history.length > 10 ? history.slice(-10) : history;
     const sdkHistory: Content[] = recentHistory.map(msg => {
       const parts: any[] = [{ text: msg.content || "" }];
       if (msg.imagePart) {
@@ -154,11 +142,10 @@ export const streamChatResponse = async (
       return { role: (msg.role === 'user' ? 'user' : 'model'), parts };
     });
 
-    const modelId = 'gemini-3-flash-preview';
+    const modelId = 'gemini-2.0-flash';
     const config: any = {
       systemInstruction: getSystemInstruction(profile),
       temperature: 0.9,
-      thinkingConfig: { thinkingBudget: 0 },
     };
 
     const response = await ai.models.generateContent({
