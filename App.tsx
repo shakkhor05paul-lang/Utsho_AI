@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Plus, MessageSquare, Trash2, Menu, Sparkles, LogOut, RefreshCcw, Globe, AlertCircle, Paperclip, X, Facebook, Instagram } from 'lucide-react';
+import { Send, Plus, MessageSquare, Trash2, Menu, Sparkles, LogOut, RefreshCcw, Settings, ExternalLink, Globe, AlertCircle, Activity, Paperclip, X, Facebook, Instagram } from 'lucide-react';
 import { ChatSession, Message, UserProfile, Gender } from './types';
-import { streamChatResponse, checkApiHealth } from './services/geminiService';
+import { streamChatResponse, checkApiHealth, getPoolStatus, adminResetPool, getLastNodeError } from './services/geminiService';
 import * as db from './services/firebaseService';
 
 const App: React.FC = () => {
@@ -12,13 +12,16 @@ const App: React.FC = () => {
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [apiStatusText, setApiStatusText] = useState<string>('Ready');
   const [connectionHealth, setConnectionHealth] = useState<'perfect' | 'error'>('perfect');
+  const [poolInfo, setPoolInfo] = useState({ total: 0, active: 0, exhausted: 0 });
   const [lastErrorDiagnostic, setLastErrorDiagnostic] = useState<string>("None");
   
   const [onboardingStep, setOnboardingStep] = useState<1 | 2 | 4>(1);
   const [tempAge, setTempAge] = useState<string>('');
   const [tempGender, setTempGender] = useState<Gender | null>(null);
+  const [customKeyInput, setCustomKeyInput] = useState('');
   
   const [selectedImage, setSelectedImage] = useState<{ data: string, mimeType: string } | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -26,6 +29,7 @@ const App: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const isAdmin = userProfile ? db.isAdmin(userProfile.email) : false;
   const isUserDebi = userProfile?.email.toLowerCase().trim() === 'nitebiswaskotha@gmail.com';
 
   useEffect(() => {
@@ -38,6 +42,7 @@ const App: React.FC = () => {
       if (localProfileStr) {
         const localProfile = JSON.parse(localProfileStr) as UserProfile;
         setUserProfile(localProfile);
+        setCustomKeyInput(localProfile.customApiKey || '');
         
         if (!localProfile.age || !localProfile.gender || localProfile.age === 0) {
           setOnboardingStep(2);
@@ -56,10 +61,16 @@ const App: React.FC = () => {
             console.error("Cloud boot error:", e);
           }
         }
-        await performHealthCheck();
+        await performHealthCheck(localProfile);
       }
     };
     bootApp();
+    const interval = setInterval(() => {
+      setPoolInfo(getPoolStatus());
+      const err = getLastNodeError();
+      setLastErrorDiagnostic(err.length > 50 ? err.substring(0, 50) + "..." : err);
+    }, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleGoogleLogin = async () => {
@@ -88,15 +99,31 @@ const App: React.FC = () => {
     if (db.isDatabaseEnabled()) await db.saveUserProfile(final);
     setOnboardingStep(4);
     if (sessions.length === 0) createNewSession(final.email);
-    await performHealthCheck();
+    await performHealthCheck(final);
   };
 
-  const performHealthCheck = async () => {
+  const performHealthCheck = async (profile?: UserProfile) => {
     setApiStatusText('Checking...');
-    const { healthy, error } = await checkApiHealth();
+    const { healthy, error } = await checkApiHealth(profile || userProfile || undefined);
     setConnectionHealth(healthy ? 'perfect' : 'error');
     setApiStatusText(healthy ? 'Active' : 'Sync Error');
+    setPoolInfo(getPoolStatus());
     if (error) setLastErrorDiagnostic(error.substring(0, 50));
+  };
+
+  const handleResetPool = () => {
+    adminResetPool();
+    performHealthCheck();
+  };
+
+  const saveSettings = async () => {
+    if (!userProfile) return;
+    const updated = { ...userProfile, customApiKey: customKeyInput.trim() };
+    setUserProfile(updated);
+    localStorage.setItem('utsho_profile', JSON.stringify(updated));
+    if (db.isDatabaseEnabled()) await db.saveUserProfile(updated);
+    setIsSettingsOpen(false);
+    await performHealthCheck(updated);
   };
 
   const createNewSession = (emailOverride?: string) => {
@@ -132,7 +159,7 @@ const App: React.FC = () => {
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.7));
+        resolve(canvas.toDataURL('image/jpeg', 0.7)); // High compression to fit Firestore 1MB limit
       };
     });
   };
@@ -144,6 +171,7 @@ const App: React.FC = () => {
     const reader = new FileReader();
     reader.onloadend = async () => {
       const originalBase64 = reader.result as string;
+      // Compress immediately for persistence compatibility
       const compressed = await compressImage(originalBase64);
       const dataOnly = compressed.split(',')[1];
       
@@ -185,14 +213,16 @@ const App: React.FC = () => {
       history,
       userProfile,
       () => {},
-      (fullText) => {
+      (fullText, sources, imageUrl) => {
         setIsLoading(false);
         const parts = fullText.split('[SPLIT]').map(p => p.trim()).filter(p => p.length > 0);
-        const newMessages: Message[] = parts.map((p) => ({
+        const newMessages: Message[] = parts.map((p, i) => ({
           id: crypto.randomUUID(),
           role: 'model',
           content: p,
-          timestamp: new Date()
+          timestamp: new Date(),
+          sources: i === parts.length - 1 ? sources : undefined,
+          imageUrl: i === 0 ? imageUrl : undefined
         }));
         
         const updatedMessages = [...history, ...newMessages];
@@ -201,6 +231,7 @@ const App: React.FC = () => {
         if (db.isDatabaseEnabled()) {
           db.updateSessionMessages(userProfile.email, activeSessionId, updatedMessages, newTitle).catch(err => console.error("Response save error:", err));
         }
+        setPoolInfo(getPoolStatus());
       },
       (err) => {
         setIsLoading(false);
@@ -259,20 +290,62 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-zinc-950 text-zinc-100 font-['Hind_Siliguri',_sans-serif]">
+      {isSettingsOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 backdrop-blur-sm bg-black/50">
+           <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl w-full max-w-md space-y-6 shadow-2xl">
+              <h3 className="text-xl font-bold flex items-center gap-2 text-indigo-400"><Settings size={20} /> Settings</h3>
+              <div className="space-y-2">
+                 <label className="text-xs font-bold text-zinc-500">PERSONAL API KEY</label>
+                 <input type="password" value={customKeyInput} onChange={e => setCustomKeyInput(e.target.value)} placeholder="Paste your Gemini key here..." className="w-full bg-zinc-800 border border-zinc-700 p-4 rounded-xl outline-none focus:border-indigo-500" />
+              </div>
+              <div className="flex gap-3">
+                 <button onClick={() => setIsSettingsOpen(false)} className="flex-1 py-3 font-bold border border-zinc-700 rounded-xl hover:bg-zinc-800">Cancel</button>
+                 <button onClick={saveSettings} className="flex-1 py-3 font-bold bg-indigo-600 rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-600/20">Save</button>
+              </div>
+           </div>
+        </div>
+      )}
+
       {/* Sidebar */}
       <aside className={`fixed md:relative z-50 inset-y-0 left-0 w-72 bg-zinc-900 border-r border-zinc-800 flex flex-col transition-transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div className="p-4 flex flex-col gap-4">
           <button onClick={() => createNewSession()} className="bg-zinc-100 text-zinc-950 py-3.5 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg hover:bg-white transition-all active:scale-95"><Plus size={18} /> New Chat</button>
           
-          <div className="flex items-center justify-between px-3 py-2 bg-zinc-800/30 rounded-xl border border-zinc-800/50">
-             <div className="flex items-center gap-2">
-                <div className={`w-1.5 h-1.5 rounded-full ${connectionHealth === 'perfect' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]'}`} />
-                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">{apiStatusText}</span>
+          {isAdmin && (
+            <div className="p-3 bg-zinc-950/50 rounded-2xl border border-zinc-800 space-y-3">
+               <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                     <Activity size={12} className="text-emerald-500" />
+                     <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Pool Health</span>
+                  </div>
+                  <button onClick={handleResetPool} className="p-1 text-zinc-600 hover:text-emerald-400 transition-colors"><RefreshCcw size={14} /></button>
+               </div>
+               <div className="grid grid-cols-2 gap-2 text-[10px] font-bold">
+                  <div className="bg-zinc-900 p-2 rounded-xl border border-zinc-800">
+                    <div className="text-emerald-500">{poolInfo.active}/{poolInfo.total}</div>
+                    <div className="text-zinc-500 uppercase text-[8px]">Alive</div>
+                  </div>
+                  <div className="bg-zinc-900 p-2 rounded-xl border border-zinc-800">
+                    <div className="text-amber-500">{poolInfo.exhausted}</div>
+                    <div className="text-zinc-500 uppercase text-[8px]">Exhausted</div>
+                  </div>
+               </div>
+               <div className="bg-zinc-900 p-2 rounded-xl border border-zinc-800 text-[9px] font-mono text-red-400/80 truncate">
+                 {lastErrorDiagnostic}
+               </div>
+               <div className="text-[9px] text-zinc-600 text-center uppercase tracking-widest font-black pt-1">{apiStatusText}</div>
+            </div>
+          )}
+          
+          {!isAdmin && (
+             <div className="flex items-center justify-between px-3 py-2 bg-zinc-800/30 rounded-xl border border-zinc-800/50">
+               <div className="flex items-center gap-2">
+                  <div className={`w-1.5 h-1.5 rounded-full ${connectionHealth === 'perfect' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]'}`} />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">System Ready</span>
+               </div>
+               <button onClick={() => setIsSettingsOpen(true)} className="text-zinc-700 hover:text-indigo-400 transition-colors"><Settings size={14} /></button>
              </div>
-             {connectionHealth === 'error' && (
-               <button onClick={performHealthCheck} className="text-zinc-600 hover:text-indigo-400 transition-colors"><RefreshCcw size={12} /></button>
-             )}
-          </div>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto px-2 space-y-1 scrollbar-hide">
@@ -370,32 +443,18 @@ const App: React.FC = () => {
           <div className="max-w-3xl mx-auto space-y-4">
             {imagePreview && (
               <div className="relative inline-block animate-in fade-in zoom-in duration-300">
-                <img src={imagePreview} className="w-24 h-24 object-cover" alt="Preview" />
-                <button onClick={() => { setSelectedImage(null); setImagePreview(null); }} className="absolute -top-2 -right-2 bg-zinc-900 border border-zinc-800 rounded-full p-1 text-zinc-400 hover:text-white shadow-xl"><X size={14} /></button>
+                <img src={imagePreview} className="w-24 h-24 object-cover rounded-3xl border-2 border-indigo-500/40 shadow-2xl" alt="Preview" />
+                <button onClick={() => { setSelectedImage(null); setImagePreview(null); }} className="absolute -top-2 -right-2 bg-red-500 text-white p-1.5 rounded-full shadow-lg hover:scale-110 transition-transform"><X size={14} /></button>
               </div>
             )}
-            <div className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 p-2 pl-4 rounded-[2rem] shadow-2xl focus-within:border-indigo-500/50 focus-within:ring-4 focus-within:ring-indigo-500/10 transition-all">
-              <button onClick={() => fileInputRef.current?.click()} className="p-2 text-zinc-500 hover:text-indigo-400 transition-colors"><Paperclip size={20} /></button>
-              <input type="file" ref={fileInputRef} onChange={handleImageSelect} accept="image/*" className="hidden" />
-              <input 
-                type="text" 
-                value={inputText} 
-                onChange={e => setInputText(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
-                placeholder="Ask Utsho anything..." 
-                className="flex-1 bg-transparent border-none outline-none text-sm font-medium py-3 placeholder:text-zinc-600"
-              />
-              <button 
-                onClick={handleSendMessage} 
-                disabled={isLoading || (!inputText.trim() && !selectedImage)}
-                className={`p-3 rounded-2xl transition-all ${isLoading || (!inputText.trim() && !selectedImage) ? 'text-zinc-700' : 'bg-indigo-600 text-white shadow-[0_0_15px_rgba(79,70,229,0.4)] active:scale-95'}`}
-              >
-                {isLoading ? <RefreshCcw size={20} className="animate-spin" /> : <Send size={20} />}
+            <div className="flex items-end gap-2 bg-zinc-900/80 border border-zinc-800 rounded-[2.5rem] p-2.5 shadow-2xl focus-within:border-indigo-500/30 transition-all">
+              <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageSelect} />
+              <button onClick={() => fileInputRef.current?.click()} className="p-3.5 text-zinc-500 hover:text-indigo-400 transition-colors"><Paperclip size={22} /></button>
+              <textarea rows={1} value={inputText} onChange={e => { setInputText(e.target.value); e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }} placeholder="Talk to Utsho..." className="flex-1 bg-transparent py-3.5 px-2 outline-none resize-none max-h-40 text-[15px] text-zinc-100 placeholder-zinc-600" />
+              <button onClick={handleSendMessage} disabled={(!inputText.trim() && !selectedImage) || isLoading} className={`p-4 rounded-full transition-all active:scale-90 shadow-xl ${ (inputText.trim() || selectedImage) && !isLoading ? (isUserDebi ? 'bg-pink-600 shadow-pink-600/20' : 'bg-indigo-600 shadow-indigo-500/20') : 'bg-zinc-800 text-zinc-600'}`}>
+                 {isLoading ? <RefreshCcw size={22} className="animate-spin" /> : <Send size={22} />}
               </button>
             </div>
-            <p className="text-[10px] text-center text-zinc-600 font-bold uppercase tracking-widest">
-              Utsho can make mistakes. Check important info.
-            </p>
           </div>
         </div>
       </main>
