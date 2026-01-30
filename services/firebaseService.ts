@@ -12,7 +12,8 @@ import {
   deleteDoc,
   increment,
   Timestamp,
-  Firestore
+  Firestore,
+  getCountFromServer
 } from 'firebase/firestore';
 import { 
   getAuth, 
@@ -53,6 +54,20 @@ export const isDatabaseEnabled = () => !!db;
 export const isAdmin = (email: string) => email.toLowerCase().trim() === ADMIN_EMAIL;
 export const isDebi = (email: string) => email.toLowerCase().trim() === DEBI_EMAIL;
 
+export const getSystemStats = async () => {
+  if (!db) return { error: "Database offline" };
+  const userCount = await getCountFromServer(collection(db, 'users'));
+  const healthRef = collection(db, 'system', 'api_health', 'keys');
+  const healthSnap = await getDocs(healthRef);
+  const healthData = healthSnap.docs.map(d => d.data());
+  
+  return {
+    totalUsers: userCount.data().count,
+    activeKeysReport: healthData.map(d => `${d.keyId}: ${d.status} (${d.failureCount} fails)`).join(', '),
+    timestamp: new Date().toLocaleString()
+  };
+};
+
 export const loginWithGoogle = async (): Promise<UserProfile | null> => {
   if (!auth) throw new Error("Auth not initialized");
   const provider = new GoogleAuthProvider();
@@ -89,15 +104,17 @@ export const saveUserProfile = async (profile: UserProfile) => {
 
 export const updateUserMemory = async (email: string, memoryUpdate: string) => {
   if (!db || !email) return;
-  const userRef = doc(db, 'users', email);
+  const userRef = doc(doc(db, 'users', email), 'private', 'memory'); // Better sub-collection structure
   const snap = await getDoc(userRef);
   let existingMemory = "";
   if (snap.exists()) {
     existingMemory = snap.data().emotionalMemory || "";
   }
-  // Append or refine memory
-  const newMemory = `${existingMemory}\n[Update ${new Date().toLocaleDateString()}]: ${memoryUpdate}`.slice(-2000); 
+  const newMemory = `${existingMemory}\n[${new Date().toLocaleDateString()}]: ${memoryUpdate}`.slice(-3000); 
   await setDoc(userRef, { emotionalMemory: newMemory }, { merge: true });
+  
+  // Also update top-level profile for quick access
+  await setDoc(doc(db, 'users', email), { emotionalMemory: newMemory }, { merge: true });
   return newMemory;
 };
 
@@ -127,25 +144,15 @@ export const getApiKeyHealthReport = async (): Promise<ApiKeyHealth[]> => {
   return snap.docs.map(d => ({ ...d.data(), lastChecked: d.data().lastChecked.toDate() } as ApiKeyHealth));
 };
 
-export const adminListAllUsers = async (): Promise<any[]> => {
-  if (!db) return [];
-  const usersRef = collection(db, 'users');
-  const querySnapshot = await getDocs(usersRef);
-  return querySnapshot.docs.map(doc => ({ email: doc.id, ...doc.data() }));
-};
-
 const sanitizeMessages = (messages: Message[]) => {
   return messages.map(m => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { imagePart, imageUrl, timestamp, ...rest } = m; 
     const persistedImageUrl = imageUrl || null;
-
     const sanitized: any = {
       ...rest,
       imageUrl: persistedImageUrl,
       timestamp: Timestamp.fromDate(new Date(timestamp))
     };
-
     Object.keys(sanitized).forEach(key => sanitized[key] === undefined && delete sanitized[key]);
     return sanitized;
   });
@@ -170,13 +177,7 @@ export const updateSessionMessages = async (email: string, sessionId: string, me
     messages: sanitizeMessages(messages)
   };
   if (title) payload.title = title;
-
-  try {
-    await setDoc(sessionRef, payload, { merge: true });
-  } catch (e) {
-    console.error("Firestore Save Error for session:", sessionId, e);
-    throw e;
-  }
+  await setDoc(sessionRef, payload, { merge: true });
 };
 
 export const getSessions = async (email: string): Promise<ChatSession[]> => {
