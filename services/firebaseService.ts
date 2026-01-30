@@ -57,39 +57,40 @@ export const isDebi = (email: string) => email.toLowerCase().trim() === DEBI_EMA
 /**
  * Fetches system statistics. Restricted to Shakkhor only.
  * If this fails with "Missing or insufficient permissions", 
- * double check the Firestore Rules provided in the README.
+ * the Firestore Rules in the Firebase Console must be updated.
  */
 export const getSystemStats = async (requesterEmail: string) => {
   if (!db) return { error: "Database offline" };
   
   const normalizedRequester = requesterEmail.toLowerCase().trim();
   if (normalizedRequester !== ADMIN_EMAIL) {
-    throw new Error("Unauthorized access attempt. This tool is exclusive to Shakkhor.");
+    throw new Error("Access Denied: You are not Shakkhor.");
   }
 
   try {
-    // Attempt to get user count
+    // 1. Get User Count (Requires 'read' on 'users' collection)
     const usersCollection = collection(db, 'users');
     const userCountSnap = await getCountFromServer(usersCollection);
+    const totalUsers = userCountSnap.data().count;
     
-    // Attempt to get API health info
+    // 2. Get API Health (Requires 'read' on 'system/api_health/keys' collection)
     const healthRef = collection(db, 'system', 'api_health', 'keys');
     const healthSnap = await getDocs(healthRef);
     const healthData = healthSnap.docs.map(d => d.data());
     
     return {
-      totalUsers: userCountSnap.data().count,
+      totalUsers,
       activeKeysReport: healthData.length > 0 
         ? healthData.map(d => `${d.keyId}: ${d.status}`).join(', ') 
-        : "No key logs yet",
+        : "No keys registered in health logs.",
       timestamp: new Date().toLocaleString(),
-      authStatus: "Admin Verified",
-      message: "Database connection successful."
+      adminVerified: true,
+      dbStatus: "Connected & Authorized"
     };
   } catch (err: any) {
-    console.error("Critical Permission Error in getSystemStats:", err);
-    // Explicitly returning the error to the AI so it can inform the admin
-    throw new Error(`Firestore Permission Error: ${err.message}. Ensure you have published the 'MASTER RULE' in Firebase Console.`);
+    console.error("Firestore Admin Permission Error:", err);
+    // This message is passed back to the AI to show to the admin
+    throw new Error(`Firestore Error: ${err.message}. Please ensure the 'MASTER ADMIN OVERRIDE' rule is published in the Firebase Console.`);
   }
 };
 

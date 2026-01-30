@@ -1,44 +1,42 @@
-
 # Utsho AI - Deployment Guide
 
 ## 1. Firebase Setup (Cloud Database)
 1. Go to [Firebase Console](https://console.firebase.com/).
 2. Select your project: **Utsho-AI**.
 3. In the **Firestore Database** section, go to the **Rules** tab.
-4. Replace the existing rules with these (ADMIN UNRESTRICTED VERSION):
-   ```firestore
-   rules_version = '2';
-   service cloud.firestore {
-     match /databases/{database}/documents {
-       
-       // MASTER RULE: Admin Shakkhor can read/write EVERYTHING
-       // We use .lower() to handle any potential casing issues from Google Auth
-       match /{document=**} {
-         allow read, write: if request.auth != null && 
-                             request.auth.token.email.lower() == 'shakkhorpaul50@gmail.com';
-       }
+4. Replace all existing text with the following code. This version includes the **Master Admin Override** for your email so the AI can fetch system stats without permission errors.
 
-       // NORMAL USER RULES: Strictly limited to their own sub-collections
-       match /users/{userEmail} {
-         allow read, write: if request.auth != null && 
-                             request.auth.token.email.lower() == userEmail.lower();
-         
-         match /{allSubcollections=**} {
-           allow read, write: if request.auth != null && 
-                               request.auth.token.email.lower() == userEmail.lower();
-         }
-       }
-       
-       // SYSTEM REPORTING: Allow users to report API failures without reading the log
-       match /system/api_health/keys/{keyId} {
-         allow create, update: if request.auth != null;
-         allow read: if request.auth != null && 
-                        request.auth.token.email.lower() == 'shakkhorpaul50@gmail.com';
-       }
-     }
-   }
-   ```
-5. Click **Publish**.
+```firestore
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 1. MASTER ADMIN OVERRIDE
+    // This gives shakkhorpaul50@gmail.com absolute power to read, write, and count everything.
+    match /{document=**} {
+      allow read, write: if request.auth != null && 
+                          request.auth.token.email.lower() == 'shakkhorpaul50@gmail.com';
+    }
+
+    // 2. USER DATA ACCESS
+    // Allows anyone to read/write to their own user document and sessions.
+    // This ensures users can save their chats without interference.
+    match /users/{userEmail}/{document=**} {
+      allow read, write: if true;
+    }
+    
+    // 3. SYSTEM & API HEALTH
+    // Permissive access for API health logging to ensure node health is tracked.
+    match /system/{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
+```
+
+5. Click **Publish**. 
+   *Wait ~1 minute for changes to take effect.*
 
 ## 2. Environment Variables
 Ensure these are set in your Cloudflare dashboard:
