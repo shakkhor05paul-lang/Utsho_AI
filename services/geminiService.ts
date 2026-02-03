@@ -196,7 +196,7 @@ export const checkApiHealth = async (profile?: UserProfile): Promise<{healthy: b
   try {
     const ai = new GoogleGenAI({ apiKey: key });
     await ai.models.generateContent({
-      model: 'gemini-2-flash',
+      model: 'gemini-flash-lite-latest',
       contents: 'ping',
     });
     return { healthy: true };
@@ -236,7 +236,7 @@ export const streamChatResponse = async (
     if (isActualAdmin) tools.push(adminStatsTool);
 
     const config: GenerateContentParameters = {
-      model: 'gemini-2-flash',
+      model: 'gemini-flash-lite-latest',
       contents: sdkHistory,
       config: {
         systemInstruction: getSystemInstruction(profile),

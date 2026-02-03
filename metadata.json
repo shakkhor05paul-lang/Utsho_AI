@@ -1,5 +1,5 @@
 {
   "name": "Utsho-AI",
-  "description": "A sleek, high-performance chatbot interface powered by Gemini 2 Flash, designed for seamless, intelligent conversations with shared API access.",
+  "description": "A sleek, high-performance chatbot interface powered by Gemini 2.5 Flash-Lite, designed for seamless, intelligent conversations with shared API access.",
   "requestFramePermissions": []
 }
