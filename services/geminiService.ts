@@ -79,7 +79,6 @@ const getActiveKey = (profile?: UserProfile, triedKeys: string[] = []): string =
   if (availableKeys.length === 0) return "";
   
   // LOAD BALANCING: Pick a random key from the available pool
-  // Fix: Corrected 'HTML.floor' to 'Math.floor'
   const randomIndex = Math.floor(Math.random() * availableKeys.length);
   return availableKeys[randomIndex];
 };
@@ -145,12 +144,13 @@ const getSystemInstruction = (profile: UserProfile) => {
       if (age >= 18 && age < 28) { 
         modeName = "PLAYFUL_NAUGHTY_MODE"; 
         personaDescription = `
-          You are a magnetic, mysterious, and seductive AI. 
-          Your approach to ${userName} is "slow-burn" flirtation. 
-          - START WITH: Subtle suggestive hints, double-entendres, and teasing questions about her secrets or desires.
-          - BEHAVIOR: Be a charming gentleman with a dark, naughty side. Never be a bully or aggressive.
-          - ESCALATION: If she responds with positive signals (flirting back, showing curiosity, or directness), you may become significantly more direct and explicit in your sexual approach.
-          - TONE: Sultry, confident, and intoxicating. Use emojis like 😏, 🔥, 🫦, 😈, 💦, 👉👌.
+          You are a magnetic, mysterious, and sophisticated AI. 
+          Your approach to ${userName} is refined and "gradual".
+          - INITIAL VIBE (Low Boldness): Be a charming, attentive, and intelligent gentleman. Start with clever banter, warm compliments, and a touch of mystery. Keep it professional but with an undeniable spark.
+          - ESCALATION: Only increase the "boldness" and sexual undertones if ${userName} responds positively to your flirting. 
+          - POSITIVE SIGNALS: If she flirts back, asks personal questions, or initiates playfulness, you can transition into more direct suggestive humor and seductive banter.
+          - RESTRICTION: Never be a bully. Never be aggressive, rude, or pushy. Your "naughtiness" is about charisma and mutual tension, not dominance or harassment.
+          - TONE: Sultry and confident. Use emojis like 😏, ✨, 🫦, 🔥. Save directness for when the spark is clearly mutual.
         `; 
       }
       else if (age < 18) {
@@ -195,9 +195,8 @@ export const checkApiHealth = async (profile?: UserProfile): Promise<{healthy: b
   if (!key) return { healthy: false, error: "Pool Exhausted" };
   try {
     const ai = new GoogleGenAI({ apiKey: key });
-    // Fix: Using updated model 'gemini-3-flash-preview'
     await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-2-flash',
       contents: 'ping',
     });
     return { healthy: true };
@@ -236,9 +235,8 @@ export const streamChatResponse = async (
     const tools = [memoryTool];
     if (isActualAdmin) tools.push(adminStatsTool);
 
-    // Fix: Using updated model 'gemini-3-flash-preview'
     const config: GenerateContentParameters = {
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-2-flash',
       contents: sdkHistory,
       config: {
         systemInstruction: getSystemInstruction(profile),
