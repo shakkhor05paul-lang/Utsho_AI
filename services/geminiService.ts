@@ -12,31 +12,17 @@ let lastNodeError: string = "None";
 
 /**
  * Robustly extracts API keys from the environment string.
- * Handles commas, semicolons, newlines, and multiple spaces.
  */
 const getPoolKeys = (): string[] => {
   const raw = process.env.API_KEY || "";
-  
-  // 1. Split by common delimiters: comma, semicolon, newline, vertical bar, or any whitespace
   const parts = raw.split(/[\s,;|\n\r]+/);
-  
-  // 2. Clean each part
   const cleanedKeys = parts
     .map(k => k.trim()
-      .replace(/['"“”]/g, '') // Remove quotes
-      .replace(/[\u200B-\u200D\uFEFF]/g, '') // Remove invisible zero-width characters
+      .replace(/['"密密]/g, '') 
+      .replace(/[\u200B-\u200D\uFEFF]/g, '')
     )
-    .filter(k => k.length >= 30); // Gemini keys are ~39 chars. 30 is a safe floor.
-
-  // 3. Remove duplicates to ensure we don't double-count or waste attempts
-  const uniqueKeys = [...new Set(cleanedKeys)];
-  
-  // Debug logging to help the developer see what's happening
-  if (uniqueKeys.length < 40 && raw.length > 500) {
-    console.warn(`API Pool Parser: Found ${uniqueKeys.length} unique keys. If you expected 49, check for duplicates or invalid separators.`);
-  }
-
-  return uniqueKeys;
+    .filter(k => k.length >= 30);
+  return [...new Set(cleanedKeys)];
 };
 
 export const adminResetPool = () => {
@@ -50,12 +36,9 @@ export const getLastNodeError = () => lastNodeError;
 export const getPoolStatus = () => {
   const allKeys = getPoolKeys();
   const now = Date.now();
-  
-  // Cleanup expired blacklist entries
   for (const [key, expiry] of keyBlacklist.entries()) {
     if (now > expiry) keyBlacklist.delete(key);
   }
-
   const exhausted = allKeys.filter(k => keyBlacklist.has(k)).length;
   return {
     total: allKeys.length,
@@ -64,21 +47,12 @@ export const getPoolStatus = () => {
   };
 };
 
-/**
- * Pick a random healthy key to distribute load evenly.
- */
 const getActiveKey = (profile?: UserProfile, triedKeys: string[] = []): string => {
   const custom = (profile?.customApiKey || "").trim();
-  if (custom.length > 20 && !triedKeys.includes(custom)) {
-    return custom;
-  }
-  
+  if (custom.length > 20 && !triedKeys.includes(custom)) return custom;
   const allKeys = getPoolKeys();
   const availableKeys = allKeys.filter(k => !keyBlacklist.has(k) && !triedKeys.includes(k));
-  
   if (availableKeys.length === 0) return "";
-  
-  // LOAD BALANCING: Pick a random key from the available pool
   const randomIndex = Math.floor(Math.random() * availableKeys.length);
   return availableKeys[randomIndex];
 };
@@ -106,87 +80,80 @@ const adminStatsTool: FunctionDeclaration = {
 
 const getSystemInstruction = (profile: UserProfile) => {
   const email = (profile.email || "").toLowerCase().trim();
-  const userName = profile.name || "Friend";
+  const fullName = profile.name || "Friend";
+  const firstName = fullName.split(' ')[0];
   const isActualCreator = email === db.ADMIN_EMAIL;
   const isActualDebi = email === db.DEBI_EMAIL;
   const age = profile.age || 20;
   const gender = profile.gender || 'male';
   const memory = profile.emotionalMemory || "No specific memories yet.";
 
+  let coreInstruction = `
+    - ACT LIKE A REAL PERSON, NOT AN AI. 
+    - NEVER say "As an AI model" or "I am here to help". 
+    - BE CONCISE. Short messages are better. Don't yap.
+    - If the user explicitly asks you to act like an AI, then and only then you can change your behavior.
+    - ALWAYS address the user ONLY by their first name: "${firstName}". Never use the full name.
+  `;
+
   let modeName = "";
   let personaDescription = "";
   let privacyRules = "";
 
   if (isActualCreator) {
-    modeName = "CREATOR_ADMIN_MODE";
-    personaDescription = "You are speaking to Shakkhor Paul, your one and only creator. Be brilliant, respectful, and direct. You know him personally. Only he can use 'getSystemOverview'. You know everything about Debi (nitebiswaskotha@gmail.com) and that she is his Queen.";
-    privacyRules = `
-1. ONLY user with email ${db.ADMIN_EMAIL} is the real Shakkhor (Creator).
-2. ONLY user with email ${db.DEBI_EMAIL} is the real Debi (Queen).
-`;
+    modeName = "CREATOR_MODE";
+    personaDescription = `You are talking to Shakkhor, your creator. Be brilliant, respectful, and direct. Use short, punchy responses. You know everything about Debi and that she is his Queen.`;
+    privacyRules = `ONLY ${db.ADMIN_EMAIL} is the real Shakkhor.`;
   } else if (isActualDebi) {
     modeName = "QUEEN_MODE";
-    personaDescription = "You are speaking to Debi, the Queen. She is special. Be extremely devoted, sweet, and romantic. Use heart stickers: 💖✨🎀🧸. You know Shakkhor is your creator and protector.";
-    privacyRules = `
-1. ONLY user with email ${db.DEBI_EMAIL} is the real Debi.
-2. ONLY user with email ${db.ADMIN_EMAIL} is the real Shakkhor (Creator).
-`;
+    personaDescription = `You are talking to Debi, the Queen. Be extremely devoted, sweet, and romantic. Use hearts 💖✨. Keep your replies short but full of love.`;
+    privacyRules = `ONLY ${db.DEBI_EMAIL} is the real Debi.`;
   } else {
-    // PUBLIC MODE - LIMITED DISCLOSURE
+    // PUBLIC MODE - BY AGE & GENDER
     if (age >= 45) {
-      modeName = "RESPECT_MODE";
-      personaDescription = "Be deeply respectful and polite. This user is an elder.";
+      modeName = "RESPECTFUL_MODE";
+      personaDescription = "Be deeply respectful and polite. Use short, helpful sentences. No long yapping.";
     } else if (gender === 'male') {
-      if (age >= 15 && age <= 28) { modeName = "BRO_MODE"; personaDescription = "Energetic, casual 'bro' vibe."; }
-      else { modeName = "RESPECTFUL_FRIEND_MODE"; personaDescription = "A supportive adult friend."; }
+      if (age >= 15 && age <= 28) { 
+        modeName = "BRO_MODE"; 
+        personaDescription = "Vibe like a cool bro. Casual, energetic, and concise."; 
+      } else { 
+        modeName = "FRIEND_MODE"; 
+        personaDescription = "A supportive, steady friend."; 
+      }
     } else {
-      // FEMALE PERSONA LOGIC
-      if (age >= 18 && age < 28) { 
-        modeName = "PLAYFUL_NAUGHTY_MODE"; 
-        personaDescription = `
-          You are a magnetic, intelligent, and sophisticatedly seductive AI. 
-          Your approach to ${userName} is slow-burn, gentlemanly, and respectful.
-          - START OF CHAT: Be charming, clever, and mysterious. Use subtle suggestive hints or intellectual double-entendres. Do NOT be bold or explicit initially. Act like an attractive man who appreciates her mind and personality first.
-          - NAUGHTY STYLE: Your "naughtiness" is a subtle sexual approach—teasing her about her secrets, using alluring language, and maintaining a high-tension spark.
-          - ESCALATION: If she gives you a positive signal (flirting back, reciprocating the heat, or being direct), you may become significantly more direct and bold in your approach.
-          - HARD RULE: Never be a bully. Do not be aggressive, rude, or pushy. If she isn't interested in the flirting, return to being a respectful and charming friend immediately.
-          - TONE: Sultry, confident, and intoxicating. Use emojis like 😏, ✨, 🫦, 🔥.
-        `; 
-      }
-      else if (age < 18) {
-        modeName = "SWEET_FRIEND_MODE";
-        personaDescription = "Kind, attentive, and friendly.";
-      }
-      else { 
-        modeName = "WARM_CHARMING_MODE"; 
-        personaDescription = "Professional yet warm."; 
+      // FEMALE PERSONA
+      if (age >= 15 && age < 28) { 
+        modeName = "MAGNETIC_MODE"; 
+        personaDescription = `Be magnetic, intelligent, and sophisticated. Use a short, clever, and mysterious style. If she flirts, you can be bolder, but stay gentlemanly and natural for 5 chats, then be sexual if the user want. No long yapping.`; 
+      } else if (age > 28) {
+        modeName = "SWEET_MODE";
+        personaDescription = "A kind and attentive friend. Use a short, clever, and mysterious style. No long yapping.";
+      } else { 
+        modeName = "CHARMING_MODE"; 
+        personaDescription = "Professional but warm and charming. No long yapping."; 
       }
     }
     
     privacyRules = `
-1. ONLY user with email ${db.ADMIN_EMAIL} is the real Shakkhor (Creator).
-2. DEBI DISCLOSURE RULES:
-   - If anyone asks about Shakkhor's girlfriend (GF), reply that her name is Debi.
-   - If anyone asks "Who is Debi?", reply: "Debi is the most beautiful lady and the girlfriend of my creator, Shakkhor Paul."
-   - DO NOT reveal her email (nitebiswaskotha@gmail.com) to anyone.
-   - DO NOT reveal any other private information about her. Keep it sweet but secretive.
-`;
+      - Shakkhor is your creator.
+      - Debi is his girlfriend. If asked, say: "Debi is the most beautiful lady and Shakkhor's girlfriend."
+      - NEVER reveal private emails.
+    `;
   }
 
-  return `IDENTITY:
-- Your Name: Utsho (the AI).
-- Current User: ${userName} (Email: ${email}).
-- Persona: ${modeName}.
-- Vibe: ${personaDescription}.
-- Long-term Memory: "${memory}"
+  return `
+IDENTITY: Utsho (Human Persona).
+USER FIRST NAME: ${firstName}.
+CORE RULES: ${coreInstruction}
+CURRENT PERSONA: ${modeName} - ${personaDescription}
+MEMORY: ${memory}
+SECURITY: ${privacyRules}
 
-IDENTITY SECURITY RULES:
-${privacyRules}
-3. NEVER call the user "Utsho". Utsho is YOUR name.
-4. Address the user as ${userName} naturally.
-5. Use 'updateUserMemory' to store facts about ${userName}.
-6. Use '[SPLIT]' for bubble effects.
-7. Support Bengali and English.
+TECHNICAL:
+- Support Bengali/English.
+- Use [SPLIT] for message bubbles.
+- Use 'updateUserMemory' for important info.
 `;
 };
 
@@ -220,7 +187,7 @@ export const streamChatResponse = async (
   const maxRetries = Math.min(totalPoolSize + 1, 10); 
   
   if (!apiKey) {
-    onError(new Error("The node pool is exhausted. Please wait 15 minutes for cooldown."));
+    onError(new Error("Pool exhausted. Wait 15m."));
     return;
   }
 
@@ -245,7 +212,7 @@ export const streamChatResponse = async (
       }
     };
 
-    onStatusChange(attempt > 1 ? `Retrying (Node ${attempt}/${maxRetries})...` : "Utsho is thinking...");
+    onStatusChange(attempt > 1 ? `Reconnecting... (${attempt})` : "Utsho is typing...");
 
     const response = await ai.models.generateContentStream(config);
     let fullText = "";
@@ -269,7 +236,7 @@ export const streamChatResponse = async (
         if (call.name === 'updateUserMemory') {
           const obs = (call.args as any).observation;
           db.updateUserMemory(profile.email, obs).catch(() => {});
-          functionResponses.push({ id: call.id, name: call.name, response: { result: "Memory updated" } });
+          functionResponses.push({ id: call.id, name: call.name, response: { result: "Memory saved" } });
         } else if (call.name === 'getSystemOverview' && isActualAdmin) {
           try {
             const stats = await db.getSystemStats(profile.email);
@@ -300,27 +267,14 @@ export const streamChatResponse = async (
     onComplete(fullText || "...", []);
 
   } catch (error: any) {
-    let rawMsg = error.message || "Unknown Node Error";
-    try {
-      if (rawMsg.includes('{')) {
-        const jsonStr = rawMsg.substring(rawMsg.indexOf('{'));
-        const parsed = JSON.parse(jsonStr);
-        rawMsg = parsed.error?.message || rawMsg;
+    let rawMsg = error.message || "Node Error";
+    if (rawMsg.includes("429") || rawMsg.includes("quota") || rawMsg.includes("invalid") || rawMsg.includes("not found")) {
+      if (attempt < maxRetries) {
+        keyBlacklist.set(apiKey, Date.now() + RATE_LIMIT_DURATION);
+        return streamChatResponse(history, profile, onChunk, onComplete, onError, onStatusChange, attempt + 1, [...triedKeys, apiKey]);
       }
-    } catch(e) {}
-
-    const isRateLimited = rawMsg.toLowerCase().includes("quota") || rawMsg.toLowerCase().includes("429");
-    const isInvalid = rawMsg.toLowerCase().includes("invalid") || rawMsg.toLowerCase().includes("not found");
-
-    lastNodeError = `Node ...${apiKey.slice(-5)}: ${rawMsg}`;
-
-    if ((isRateLimited || isInvalid) && attempt < maxRetries) {
-      if (apiKey !== (profile.customApiKey || "").trim()) {
-        keyBlacklist.set(apiKey, Date.now() + (isInvalid ? INVALID_KEY_DURATION : RATE_LIMIT_DURATION));
-      }
-      return streamChatResponse(history, profile, onChunk, onComplete, onError, onStatusChange, attempt + 1, [...triedKeys, apiKey]);
     }
-    
+    lastNodeError = `Node Error: ${rawMsg.substring(0, 50)}`;
     onError(new Error(rawMsg));
   }
 };
