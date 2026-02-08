@@ -13,7 +13,8 @@ import {
   increment,
   Timestamp,
   Firestore,
-  getCountFromServer
+  getCountFromServer,
+  runTransaction
 } from 'firebase/firestore';
 import { 
   getAuth, 
@@ -56,8 +57,39 @@ export const isAdmin = (email: string) => email.toLowerCase().trim() === ADMIN_E
 export const isDebi = (email: string) => email.toLowerCase().trim() === DEBI_EMAIL;
 
 /**
- * Fetches system statistics. Restricted to Shakkhor's verified email only.
+ * Ensures a TrxID is not reused and upgrades user.
  */
+export const verifyAndRegisterTrxId = async (email: string, trxId: string): Promise<{success: boolean, message: string}> => {
+  if (!db) return { success: false, message: "Database offline" };
+  const emailLower = email.toLowerCase().trim();
+  const paymentRef = doc(db, 'verified_payments', trxId.toUpperCase());
+  const userRef = doc(db, 'users', emailLower);
+
+  try {
+    return await runTransaction(db, async (transaction) => {
+      const paymentDoc = await transaction.get(paymentRef);
+      if (paymentDoc.exists()) {
+        return { success: false, message: "This TrxID has already been used by another user." };
+      }
+
+      // Register payment
+      transaction.set(paymentRef, {
+        usedBy: emailLower,
+        timestamp: Timestamp.now(),
+        amount: 5,
+        status: 'verified'
+      });
+
+      // Upgrade user
+      transaction.update(userRef, { subscriptionStatus: 'pro' });
+
+      return { success: true, message: "Subscription activated successfully!" };
+    });
+  } catch (e: any) {
+    return { success: false, message: e.message };
+  }
+};
+
 export const getSystemStats = async (requesterEmail: string) => {
   if (!db) return { error: "Database offline" };
   

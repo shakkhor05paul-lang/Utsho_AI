@@ -1,15 +1,14 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Plus, MessageSquare, Trash2, Menu, Sparkles, LogOut, RefreshCcw, Settings, Globe, AlertCircle, Zap, Paperclip, X, Facebook, Instagram, CreditCard, ShieldCheck, CheckCircle2, Eye, EyeOff, Crown } from 'lucide-react';
+import { Send, Plus, MessageSquare, Trash2, Menu, Sparkles, LogOut, RefreshCcw, Settings, Globe, AlertCircle, Zap, Paperclip, X, Facebook, Instagram, CreditCard, ShieldCheck, CheckCircle2, Eye, EyeOff, Crown, Copy, ExternalLink, Smartphone, ArrowRight } from 'lucide-react';
 import { ChatSession, Message, UserProfile, Gender, SubscriptionStatus } from './types';
 import { streamChatResponse, checkApiHealth, getPoolStatus, adminResetPool, getLastNodeError } from './services/geminiService';
 import * as db from './services/firebaseService';
 
 const FREE_DAILY_LIMIT = 5;
 
-// Obfuscated bKash number (+8801302869122)
-// This is Base64 encoded to prevent simple text-search scrapers from finding it easily.
-const BK_RAW = "Kzg4MDEzMDI4NjkxMjI="; 
+// Replace this with your actual Stripe Payment Link from dashboard.stripe.com
+const STRIPE_PAYMENT_LINK = "https://buy.stripe.com/test_6oEbM09qj5pG6Z28ww"; 
 
 const App: React.FC = () => {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -29,9 +28,7 @@ const App: React.FC = () => {
   const [tempAge, setTempAge] = useState<string>('');
   const [tempGender, setTempGender] = useState<Gender | null>(null);
   const [customKeyInput, setCustomKeyInput] = useState('');
-  const [trxId, setTrxId] = useState('');
-  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
-  const [showNumber, setShowNumber] = useState(false);
+  const [isVerifyingStripe, setIsVerifyingStripe] = useState(false);
   
   const [selectedImage, setSelectedImage] = useState<{ data: string, mimeType: string } | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -43,7 +40,6 @@ const App: React.FC = () => {
   const isUserDebi = userProfile ? db.isDebi(userProfile.email) : false;
   const isPro = userProfile?.subscriptionStatus === 'pro' || isAdmin || isUserDebi;
 
-  // Calculate daily messages sent by user
   const getDailyMessageCount = () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -142,36 +138,31 @@ const App: React.FC = () => {
     if (error && error !== "ping") setLastErrorDiagnostic(error.substring(0, 80));
   };
 
+  const handleStripeCheckout = () => {
+    // Append the user's email to the payment link so Stripe knows who paid
+    const paymentUrl = `${STRIPE_PAYMENT_LINK}?prefilled_email=${encodeURIComponent(userProfile?.email || '')}`;
+    window.open(paymentUrl, '_blank');
+    setIsVerifyingStripe(true);
+    // After redirecting, the user can click "I have paid" or the webhook will update the DB.
+  };
+
+  const checkSubscriptionSync = async () => {
+    if (!userProfile) return;
+    const cloudProfile = await db.getUserProfile(userProfile.email);
+    if (cloudProfile?.subscriptionStatus === 'pro') {
+      setUserProfile(cloudProfile);
+      localStorage.setItem('utsho_profile', JSON.stringify(cloudProfile));
+      setIsSubscriptionOpen(false);
+      setIsVerifyingStripe(false);
+      alert("Success! Your Pro account is now active.");
+    } else {
+      alert("Payment still processing. Please wait a moment or finish the checkout.");
+    }
+  };
+
   const handleResetPool = () => {
     adminResetPool();
     performHealthCheck();
-  };
-
-  const handleSubscription = async () => {
-    if (!trxId.trim() || !userProfile) return;
-    
-    // Logic Verification for TrxID
-    // bKash TrxIDs are usually 10 characters long alphanumeric.
-    const trxRegex = /^[A-Z0-9]{8,12}$/;
-    if (!trxRegex.test(trxId)) {
-      alert("Invalid TrxID format. It should be 10 alphanumeric characters from your bKash SMS.");
-      return;
-    }
-
-    setIsProcessingPayment(true);
-    // Simulate payment verification delay (In production, this would call a Cloud Function)
-    setTimeout(async () => {
-      const updatedProfile = { ...userProfile, subscriptionStatus: 'pro' as SubscriptionStatus };
-      setUserProfile(updatedProfile);
-      localStorage.setItem('utsho_profile', JSON.stringify(updatedProfile));
-      if (db.isDatabaseEnabled()) {
-        await db.updateSubscriptionStatus(userProfile.email, 'pro');
-      }
-      setIsProcessingPayment(false);
-      setIsSubscriptionOpen(false);
-      setTrxId('');
-      alert("Payment Verified! Subscription Activated. Enjoy unlimited messages.");
-    }, 3000);
   };
 
   const saveSettings = async () => {
@@ -195,7 +186,6 @@ const App: React.FC = () => {
   const handleSendMessage = async () => {
     if (!userProfile) return;
     
-    // Enforce DAILY limit for free users
     if (!isPro && dailyUserMessages >= FREE_DAILY_LIMIT) {
       setIsSubscriptionOpen(true);
       return;
@@ -283,8 +273,8 @@ const App: React.FC = () => {
       <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-[3rem] p-12 shadow-2xl space-y-8 text-center animate-in fade-in duration-500">
         <div className={`w-20 h-20 rounded-3xl mx-auto flex items-center justify-center text-white floating-ai shadow-lg ${isUserDebi ? 'bg-pink-600 shadow-pink-600/30' : 'bg-indigo-600 shadow-indigo-600/30'}`}><Sparkles size={40} /></div>
         <div className="space-y-2">
-          <h1 className="text-3xl font-black">Utsho AI</h1>
-          <p className="text-zinc-500">Adaptive Fullstack AI Engine</p>
+          <h1 className="text-3xl font-black tracking-tighter">UTSHO AI</h1>
+          <p className="text-zinc-500 text-sm">Automated Stripe Integration</p>
         </div>
         <button onClick={handleGoogleLogin} className="w-full bg-white text-zinc-950 font-bold py-4 rounded-2xl flex items-center justify-center gap-3 active:scale-95 transition-all">
           <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="" /> Sign in with Google
@@ -342,48 +332,46 @@ const App: React.FC = () => {
            <div className="bg-zinc-900 border border-zinc-800 p-6 md:p-10 rounded-[2.5rem] w-full max-w-lg space-y-8 shadow-2xl animate-in zoom-in fade-in duration-300">
               <div className="flex justify-between items-start">
                 <div className="space-y-1">
-                  <h3 className="text-2xl font-black text-indigo-400 flex items-center gap-2 uppercase tracking-tighter"><CreditCard size={28} /> Utsho Pro</h3>
-                  <p className="text-zinc-500 text-sm font-medium">Unlock unlimited daily conversations & memory.</p>
+                  <h3 className="text-2xl font-black text-[#635BFF] flex items-center gap-2 uppercase tracking-tighter"><CreditCard size={28} /> Pro Upgrade</h3>
+                  <p className="text-zinc-500 text-sm font-medium">Automatic verification via Stripe.</p>
                 </div>
                 <button onClick={() => setIsSubscriptionOpen(false)} className="p-2 text-zinc-600 hover:text-white"><X size={24} /></button>
               </div>
 
-              <div className="bg-indigo-600/10 border border-indigo-500/20 p-6 rounded-3xl space-y-4">
+              <div className="bg-[#635BFF]/10 border border-[#635BFF]/20 p-6 rounded-3xl space-y-4">
                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-bold text-zinc-300">Monthly Plan</span>
-                    <span className="text-2xl font-black text-white">5 BDT <span className="text-xs text-zinc-400 font-medium">/ month</span></span>
+                    <span className="text-sm font-bold text-zinc-300">Pro Plan</span>
+                    <span className="text-2xl font-black text-white">$0.05 <span className="text-xs text-zinc-400 font-medium">/ month</span></span>
                  </div>
                  <div className="space-y-2">
                     <div className="flex items-center gap-2 text-xs text-emerald-400 font-bold"><CheckCircle2 size={14} /> Unlimited Chat Messages</div>
-                    <div className="flex items-center gap-2 text-xs text-emerald-400 font-bold"><CheckCircle2 size={14} /> Persistent Memory Synced</div>
-                    <div className="flex items-center gap-2 text-xs text-emerald-400 font-bold"><CheckCircle2 size={14} /> Priority Node Access</div>
+                    <div className="flex items-center gap-2 text-xs text-emerald-400 font-bold"><CheckCircle2 size={14} /> Instant automated activation</div>
+                    <div className="flex items-center gap-2 text-xs text-emerald-400 font-bold"><CheckCircle2 size={14} /> Global Persistence Memory</div>
                  </div>
               </div>
 
               <div className="space-y-4">
-                 <div className="p-4 bg-zinc-800/50 rounded-2xl border border-zinc-700 space-y-2">
-                    <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Payment Instruction</p>
-                    <div className="flex items-center justify-between">
-                       <p className="text-sm font-medium text-zinc-300">bKash (Send Money): 
-                         <span className="text-pink-500 font-black ml-1 font-mono">
-                            {showNumber ? atob(BK_RAW) : "01XXX-XXXXXX"}
-                         </span>
-                       </p>
-                       <button onClick={() => setShowNumber(!showNumber)} className="text-zinc-500 hover:text-white transition-colors">
-                         {showNumber ? <EyeOff size={16} /> : <Eye size={16} />}
-                       </button>
+                 <div className="p-5 bg-zinc-800/80 rounded-[2rem] border border-zinc-700 space-y-4 shadow-inner">
+                    <div className="flex items-center justify-center py-4">
+                       <ShieldCheck className="text-emerald-500" size={48} />
                     </div>
-                    <p className="text-[10px] text-zinc-500 italic">Enter the 10-char TrxID from your SMS below.</p>
-                 </div>
-                 
-                 <div className="space-y-2">
-                    <input type="text" value={trxId} onChange={e => setTrxId(e.target.value.toUpperCase())} placeholder="TrxID (e.g. AM21CD88EF)" className="w-full bg-zinc-800 border border-zinc-700 p-4 rounded-xl outline-none focus:border-pink-500 text-sm font-mono text-white tracking-widest" />
+                    <p className="text-xs text-center text-zinc-400 font-medium px-4">
+                       Secure payment processed by Stripe. Your account will be upgraded instantly once the payment is completed.
+                    </p>
                  </div>
               </div>
 
-              <button onClick={handleSubscription} disabled={!trxId.trim() || isProcessingPayment} className={`w-full py-4 rounded-2xl font-black text-white transition-all flex items-center justify-center gap-2 ${trxId.trim() && !isProcessingPayment ? 'bg-pink-600 shadow-xl shadow-pink-600/20 hover:scale-[1.02]' : 'bg-zinc-800 text-zinc-600 cursor-not-allowed'}`}>
-                 {isProcessingPayment ? <RefreshCcw size={20} className="animate-spin" /> : <><ShieldCheck size={20} /> Verify Payment</>}
-              </button>
+              <div className="space-y-3">
+                <button onClick={handleStripeCheckout} className="w-full py-4 rounded-2xl font-black text-white bg-[#635BFF] shadow-xl shadow-[#635BFF]/20 hover:scale-[1.02] transition-all flex items-center justify-center gap-2">
+                   Pay with Stripe <ArrowRight size={20} />
+                </button>
+                
+                {isVerifyingStripe && (
+                  <button onClick={checkSubscriptionSync} className="w-full py-3 rounded-2xl font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 transition-all flex items-center justify-center gap-2">
+                    <RefreshCcw size={16} className="animate-spin" /> I have finished payment
+                  </button>
+                )}
+              </div>
            </div>
         </div>
       )}
@@ -430,12 +418,12 @@ const App: React.FC = () => {
             </div>
           )}
           {isPro && (
-            <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-[2rem] space-y-1">
+            <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-[2rem] space-y-1 shadow-lg shadow-amber-500/5">
                <div className="flex items-center gap-2 text-amber-500">
                   <Crown size={14} />
                   <span className="text-[10px] font-black uppercase tracking-widest">Utsho Pro Member</span>
                </div>
-               <p className="text-[9px] text-zinc-500 font-medium">Unlimited messages & priority access active.</p>
+               <p className="text-[9px] text-zinc-500 font-medium leading-relaxed">Unlimited access via Stripe checkout.</p>
             </div>
           )}
           
@@ -485,10 +473,10 @@ const App: React.FC = () => {
           <div className="max-w-3xl mx-auto space-y-6 pb-4">
             {!activeSession || activeSession.messages.length === 0 ? (
               <div className="h-[65vh] flex flex-col items-center justify-center space-y-6 text-center animate-in fade-in slide-in-from-top-8 duration-700">
-                <div className={`w-28 h-28 rounded-[2.5rem] flex items-center justify-center shadow-2xl floating-ai ${isUserDebi ? 'bg-pink-600' : 'bg-indigo-600'}`}><Sparkles size={48} /></div>
+                <div className={`w-28 h-28 rounded-[2.5rem] flex items-center justify-center shadow-2xl floating-ai ${isUserDebi ? 'bg-pink-600 shadow-pink-600/20' : 'bg-indigo-600 shadow-indigo-600/20'}`}><Sparkles size={48} /></div>
                 <div className="space-y-2 px-4">
                   <h3 className="text-3xl font-black tracking-tight">Hey {userProfile?.name.split(' ')[0]}!</h3>
-                  <p className="text-zinc-500 text-sm max-w-xs mx-auto">Fullstack intelligence engaged. Memory persistent. What's on your mind?</p>
+                  <p className="text-zinc-500 text-sm max-w-xs mx-auto font-medium">Fullstack Adaptive Identity Engaged. <br/> How can I help you today?</p>
                 </div>
               </div>
             ) : (
