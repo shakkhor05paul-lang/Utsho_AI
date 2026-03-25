@@ -1,0 +1,330 @@
+
+export type ThemeName = 'midnight' | 'daylight' | 'ocean' | 'forest' | 'sunset' | 'rose';
+
+export interface ThemeColors {
+  // Backgrounds
+  bgPrimary: string;
+  bgSecondary: string;
+  bgTertiary: string;
+  bgInput: string;
+  bgHover: string;
+
+  // Borders
+  borderPrimary: string;
+  borderSecondary: string;
+  borderFocus: string;
+
+  // Text
+  textPrimary: string;
+  textSecondary: string;
+  textMuted: string;
+  textInverse: string;
+
+  // Accent
+  accent: string;
+  accentHover: string;
+  accentShadow: string;
+  accentSubtle: string;
+
+  // Chat bubbles
+  userBubble: string;
+  userBubbleShadow: string;
+  botBubble: string;
+  botBubbleBorder: string;
+
+  // Status
+  statusBar: string;
+  statusBarText: string;
+
+  // Scrollbar
+  scrollThumb: string;
+  scrollThumbHover: string;
+
+  // Button
+  buttonPrimary: string;
+  buttonPrimaryText: string;
+  buttonSecondary: string;
+  buttonSecondaryText: string;
+}
+
+export interface Theme {
+  name: ThemeName;
+  label: string;
+  emoji: string;
+  colors: ThemeColors;
+}
+
+export const themes: Record<ThemeName, Theme> = {
+  midnight: {
+    name: 'midnight',
+    label: 'Midnight',
+    emoji: '',
+    colors: {
+      bgPrimary: '#09090b',
+      bgSecondary: '#18181b',
+      bgTertiary: '#27272a',
+      bgInput: '#27272a',
+      bgHover: 'rgba(39,39,42,0.4)',
+      borderPrimary: '#27272a',
+      borderSecondary: '#3f3f46',
+      borderFocus: 'rgba(99,102,241,0.3)',
+      textPrimary: '#f4f4f5',
+      textSecondary: '#a1a1aa',
+      textMuted: '#71717a',
+      textInverse: '#09090b',
+      accent: '#4f46e5',
+      accentHover: '#4338ca',
+      accentShadow: 'rgba(99,102,241,0.2)',
+      accentSubtle: 'rgba(99,102,241,0.1)',
+      userBubble: '#4f46e5',
+      userBubbleShadow: 'rgba(99,102,241,0.2)',
+      botBubble: '#18181b',
+      botBubbleBorder: '#27272a',
+      statusBar: 'rgba(39,39,42,0.5)',
+      statusBarText: '#a1a1aa',
+      scrollThumb: '#27272a',
+      scrollThumbHover: '#3f3f46',
+      buttonPrimary: '#f4f4f5',
+      buttonPrimaryText: '#09090b',
+      buttonSecondary: '#27272a',
+      buttonSecondaryText: '#a1a1aa',
+    },
+  },
+
+  daylight: {
+    name: 'daylight',
+    label: 'Daylight',
+    emoji: '',
+    colors: {
+      bgPrimary: '#ffffff',
+      bgSecondary: '#f8fafc',
+      bgTertiary: '#f1f5f9',
+      bgInput: '#f1f5f9',
+      bgHover: 'rgba(241,245,249,0.6)',
+      borderPrimary: '#e2e8f0',
+      borderSecondary: '#cbd5e1',
+      borderFocus: 'rgba(99,102,241,0.4)',
+      textPrimary: '#0f172a',
+      textSecondary: '#475569',
+      textMuted: '#94a3b8',
+      textInverse: '#ffffff',
+      accent: '#4f46e5',
+      accentHover: '#4338ca',
+      accentShadow: 'rgba(99,102,241,0.15)',
+      accentSubtle: 'rgba(99,102,241,0.08)',
+      userBubble: '#4f46e5',
+      userBubbleShadow: 'rgba(99,102,241,0.15)',
+      botBubble: '#f8fafc',
+      botBubbleBorder: '#e2e8f0',
+      statusBar: '#f1f5f9',
+      statusBarText: '#475569',
+      scrollThumb: '#cbd5e1',
+      scrollThumbHover: '#94a3b8',
+      buttonPrimary: '#0f172a',
+      buttonPrimaryText: '#ffffff',
+      buttonSecondary: '#e2e8f0',
+      buttonSecondaryText: '#475569',
+    },
+  },
+
+  ocean: {
+    name: 'ocean',
+    label: 'Ocean',
+    emoji: '',
+    colors: {
+      bgPrimary: '#0c1222',
+      bgSecondary: '#111a2e',
+      bgTertiary: '#1a2540',
+      bgInput: '#1a2540',
+      bgHover: 'rgba(26,37,64,0.5)',
+      borderPrimary: '#1e3050',
+      borderSecondary: '#264060',
+      borderFocus: 'rgba(34,211,238,0.3)',
+      textPrimary: '#e0f2fe',
+      textSecondary: '#7dd3fc',
+      textMuted: '#38bdf8',
+      textInverse: '#0c1222',
+      accent: '#0891b2',
+      accentHover: '#0e7490',
+      accentShadow: 'rgba(8,145,178,0.25)',
+      accentSubtle: 'rgba(8,145,178,0.1)',
+      userBubble: '#0891b2',
+      userBubbleShadow: 'rgba(8,145,178,0.25)',
+      botBubble: '#111a2e',
+      botBubbleBorder: '#1e3050',
+      statusBar: 'rgba(26,37,64,0.5)',
+      statusBarText: '#7dd3fc',
+      scrollThumb: '#1e3050',
+      scrollThumbHover: '#264060',
+      buttonPrimary: '#e0f2fe',
+      buttonPrimaryText: '#0c1222',
+      buttonSecondary: '#1a2540',
+      buttonSecondaryText: '#7dd3fc',
+    },
+  },
+
+  forest: {
+    name: 'forest',
+    label: 'Forest',
+    emoji: '',
+    colors: {
+      bgPrimary: '#0a120a',
+      bgSecondary: '#111c11',
+      bgTertiary: '#1a2e1a',
+      bgInput: '#1a2e1a',
+      bgHover: 'rgba(26,46,26,0.5)',
+      borderPrimary: '#1f3d1f',
+      borderSecondary: '#2d5a2d',
+      borderFocus: 'rgba(34,197,94,0.3)',
+      textPrimary: '#ecfdf5',
+      textSecondary: '#86efac',
+      textMuted: '#4ade80',
+      textInverse: '#0a120a',
+      accent: '#16a34a',
+      accentHover: '#15803d',
+      accentShadow: 'rgba(22,163,74,0.25)',
+      accentSubtle: 'rgba(22,163,74,0.1)',
+      userBubble: '#16a34a',
+      userBubbleShadow: 'rgba(22,163,74,0.25)',
+      botBubble: '#111c11',
+      botBubbleBorder: '#1f3d1f',
+      statusBar: 'rgba(26,46,26,0.5)',
+      statusBarText: '#86efac',
+      scrollThumb: '#1f3d1f',
+      scrollThumbHover: '#2d5a2d',
+      buttonPrimary: '#ecfdf5',
+      buttonPrimaryText: '#0a120a',
+      buttonSecondary: '#1a2e1a',
+      buttonSecondaryText: '#86efac',
+    },
+  },
+
+  sunset: {
+    name: 'sunset',
+    label: 'Sunset',
+    emoji: '',
+    colors: {
+      bgPrimary: '#1a0a0a',
+      bgSecondary: '#241111',
+      bgTertiary: '#361a1a',
+      bgInput: '#361a1a',
+      bgHover: 'rgba(54,26,26,0.5)',
+      borderPrimary: '#4a2020',
+      borderSecondary: '#5c2d2d',
+      borderFocus: 'rgba(251,146,60,0.3)',
+      textPrimary: '#fff7ed',
+      textSecondary: '#fdba74',
+      textMuted: '#fb923c',
+      textInverse: '#1a0a0a',
+      accent: '#ea580c',
+      accentHover: '#c2410c',
+      accentShadow: 'rgba(234,88,12,0.25)',
+      accentSubtle: 'rgba(234,88,12,0.1)',
+      userBubble: '#ea580c',
+      userBubbleShadow: 'rgba(234,88,12,0.25)',
+      botBubble: '#241111',
+      botBubbleBorder: '#4a2020',
+      statusBar: 'rgba(54,26,26,0.5)',
+      statusBarText: '#fdba74',
+      scrollThumb: '#4a2020',
+      scrollThumbHover: '#5c2d2d',
+      buttonPrimary: '#fff7ed',
+      buttonPrimaryText: '#1a0a0a',
+      buttonSecondary: '#361a1a',
+      buttonSecondaryText: '#fdba74',
+    },
+  },
+
+  rose: {
+    name: 'rose',
+    label: 'Rose',
+    emoji: '',
+    colors: {
+      bgPrimary: '#120a10',
+      bgSecondary: '#1c1018',
+      bgTertiary: '#2e1a28',
+      bgInput: '#2e1a28',
+      bgHover: 'rgba(46,26,40,0.5)',
+      borderPrimary: '#3d1f35',
+      borderSecondary: '#5a2d4d',
+      borderFocus: 'rgba(244,114,182,0.3)',
+      textPrimary: '#fdf2f8',
+      textSecondary: '#f9a8d4',
+      textMuted: '#f472b6',
+      textInverse: '#120a10',
+      accent: '#db2777',
+      accentHover: '#be185d',
+      accentShadow: 'rgba(219,39,119,0.25)',
+      accentSubtle: 'rgba(219,39,119,0.1)',
+      userBubble: '#db2777',
+      userBubbleShadow: 'rgba(219,39,119,0.25)',
+      botBubble: '#1c1018',
+      botBubbleBorder: '#3d1f35',
+      statusBar: 'rgba(46,26,40,0.5)',
+      statusBarText: '#f9a8d4',
+      scrollThumb: '#3d1f35',
+      scrollThumbHover: '#5a2d4d',
+      buttonPrimary: '#fdf2f8',
+      buttonPrimaryText: '#120a10',
+      buttonSecondary: '#2e1a28',
+      buttonSecondaryText: '#f9a8d4',
+    },
+  },
+};
+
+export const themeNames: ThemeName[] = ['midnight', 'daylight', 'ocean', 'forest', 'sunset', 'rose'];
+
+export function applyTheme(theme: Theme): void {
+  const root = document.documentElement;
+  const c = theme.colors;
+
+  root.style.setProperty('--bg-primary', c.bgPrimary);
+  root.style.setProperty('--bg-secondary', c.bgSecondary);
+  root.style.setProperty('--bg-tertiary', c.bgTertiary);
+  root.style.setProperty('--bg-input', c.bgInput);
+  root.style.setProperty('--bg-hover', c.bgHover);
+
+  root.style.setProperty('--border-primary', c.borderPrimary);
+  root.style.setProperty('--border-secondary', c.borderSecondary);
+  root.style.setProperty('--border-focus', c.borderFocus);
+
+  root.style.setProperty('--text-primary', c.textPrimary);
+  root.style.setProperty('--text-secondary', c.textSecondary);
+  root.style.setProperty('--text-muted', c.textMuted);
+  root.style.setProperty('--text-inverse', c.textInverse);
+
+  root.style.setProperty('--accent', c.accent);
+  root.style.setProperty('--accent-hover', c.accentHover);
+  root.style.setProperty('--accent-shadow', c.accentShadow);
+  root.style.setProperty('--accent-subtle', c.accentSubtle);
+
+  root.style.setProperty('--user-bubble', c.userBubble);
+  root.style.setProperty('--user-bubble-shadow', c.userBubbleShadow);
+  root.style.setProperty('--bot-bubble', c.botBubble);
+  root.style.setProperty('--bot-bubble-border', c.botBubbleBorder);
+
+  root.style.setProperty('--status-bar', c.statusBar);
+  root.style.setProperty('--status-bar-text', c.statusBarText);
+
+  root.style.setProperty('--scroll-thumb', c.scrollThumb);
+  root.style.setProperty('--scroll-thumb-hover', c.scrollThumbHover);
+
+  root.style.setProperty('--btn-primary', c.buttonPrimary);
+  root.style.setProperty('--btn-primary-text', c.buttonPrimaryText);
+  root.style.setProperty('--btn-secondary', c.buttonSecondary);
+  root.style.setProperty('--btn-secondary-text', c.buttonSecondaryText);
+
+  // Also update body background/color for full-page coverage
+  document.body.style.backgroundColor = c.bgPrimary;
+  document.body.style.color = c.textPrimary;
+}
+
+export function getStoredTheme(): ThemeName {
+  const stored = localStorage.getItem('utsho_theme');
+  if (stored && stored in themes) return stored as ThemeName;
+  return 'midnight';
+}
+
+export function storeTheme(name: ThemeName): void {
+  localStorage.setItem('utsho_theme', name);
+}
