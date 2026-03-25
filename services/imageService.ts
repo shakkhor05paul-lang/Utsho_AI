@@ -57,12 +57,18 @@ export const getRemainingImageGenerations = (email: string): number => {
  */
 export const getImageDailyLimit = (): number => DAILY_IMAGE_LIMIT;
 
+const STABLE_HORDE_API = 'https://stablehorde.net/api/v2';
+const STABLE_HORDE_ANON_KEY = '0000000000'; // Anonymous access key
+const MAX_POLL_ATTEMPTS = 60; // Max ~2 minutes of polling
+const POLL_INTERVAL_MS = 2000; // Poll every 2 seconds
+
 /**
- * Generates an image using Pollinations.ai (Completely Free, No API Key).
+ * Generates an image using Stable Horde (completely free, crowdsourced GPU network).
+ * No API key required -- uses anonymous access.
  * Enforces a per-user daily limit of 5 images.
  * @param prompt The prompt for the image generation.
  * @param email The user's email for rate limiting.
- * @returns Base64 encoded image data, or null if failed, or an error string if rate limited.
+ * @returns Image URL string, or null if failed.
  */
 export const generateImage = async (prompt: string, email?: string): Promise<string | null> => {
   // Enforce rate limit if email is provided
@@ -73,31 +79,75 @@ export const generateImage = async (prompt: string, email?: string): Promise<str
     }
   }
   try {
-    // Pollinations uses a simple URL structure: https://image.pollinations.ai/prompt/{prompt}
-    // We add some parameters for better quality and consistency.
-    // Using a fixed seed so the URL is stable and the image can be loaded directly.
-    const seed = Math.floor(Math.random() * 1000000);
-    const encodedPrompt = encodeURIComponent(prompt);
-    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&nologo=true&enhance=true&seed=${seed}`;
+    // Step 1: Submit async generation request to Stable Horde
+    const submitResponse = await fetch(`${STABLE_HORDE_API}/generate/async`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': STABLE_HORDE_ANON_KEY,
+      },
+      body: JSON.stringify({
+        prompt: prompt,
+        params: {
+          width: 512,
+          height: 512,
+          steps: 25,
+          cfg_scale: 7,
+        },
+        nsfw: false,
+        censor_nsfw: true,
+        models: ['stable_diffusion'],
+        r2: true,
+      }),
+    });
 
-    // Use the direct URL instead of base64 conversion.
-    // Base64 of large images exceeds Firestore's 1MB document limit and causes broken images.
-    // Pollinations URLs are stable (same seed = same image) and load directly in <img> tags.
-    try {
-      // Verify the URL works with a quick fetch (follows redirects, confirms image generation)
-      const response = await fetch(imageUrl, { method: 'GET' });
-      if (!response.ok) throw new Error("Failed to generate image from Pollinations");
-      
-      // We got a valid response. Use the final URL (after any redirects) for display.
-      // Track usage on success
-      if (email) incrementImageUsage(email);
-      return imageUrl;
-    } catch (fetchError) {
-      console.warn("IMAGE_SERVICE: Fetch verification failed, returning URL anyway:", fetchError);
-      // Still return the URL - Pollinations might work directly in img tag even if fetch fails (CORS)
-      if (email) incrementImageUsage(email);
-      return imageUrl;
+    if (!submitResponse.ok) {
+      console.error("IMAGE_SERVICE: Stable Horde submit failed:", submitResponse.status);
+      return null;
     }
+
+    const submitData = await submitResponse.json();
+    const jobId = submitData.id;
+
+    if (!jobId) {
+      console.error("IMAGE_SERVICE: No job ID returned from Stable Horde");
+      return null;
+    }
+
+    console.log("IMAGE_SERVICE: Job submitted to Stable Horde:", jobId);
+
+    // Step 2: Poll for completion
+    for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+
+      const statusResponse = await fetch(`${STABLE_HORDE_API}/generate/status/${jobId}`);
+      if (!statusResponse.ok) continue;
+
+      const statusData = await statusResponse.json();
+
+      if (statusData.faulted) {
+        console.error("IMAGE_SERVICE: Stable Horde job faulted");
+        return null;
+      }
+
+      if (statusData.done && statusData.generations && statusData.generations.length > 0) {
+        const imageUrl = statusData.generations[0].img;
+        if (imageUrl) {
+          // Track usage on success
+          if (email) incrementImageUsage(email);
+          console.log("IMAGE_SERVICE: Image generated successfully via Stable Horde");
+          return imageUrl;
+        }
+      }
+
+      // Still processing, continue polling
+      if (statusData.queue_position !== undefined) {
+        console.log(`IMAGE_SERVICE: Queue position: ${statusData.queue_position}, waiting: ${statusData.waiting}`);
+      }
+    }
+
+    console.error("IMAGE_SERVICE: Stable Horde generation timed out");
+    return null;
   } catch (error) {
     console.error("IMAGE_SERVICE: Error generating image:", error);
     return null;
