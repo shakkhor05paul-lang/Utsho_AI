@@ -3,7 +3,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Send, Plus, MessageSquare, Trash2, Menu, Sparkles, LogOut, RefreshCcw, Settings, Globe, AlertCircle, Zap, Paperclip, X, Facebook, Instagram, CreditCard, ShieldCheck, CheckCircle2, Eye, EyeOff, Crown, Copy, ExternalLink, Smartphone, ArrowRight } from 'lucide-react';
 import { ChatSession, Message, UserProfile, Gender, SubscriptionStatus } from './types';
 import { streamChatResponse, checkApiHealth, getPoolStatus, adminResetPool, getLastNodeError } from './services/groqService';
-import { generateImage } from './services/imageService';
 import * as db from './services/firebaseService';
 
 const FREE_DAILY_LIMIT = 5;
@@ -224,36 +223,6 @@ const App: React.FC = () => {
       (chunk) => {},
       (fullText, sources, imageUrl) => {
         setIsLoading(false);
-        
-        // Check for image generation tag
-        const imageGenMatch = fullText.match(/\[GENERATE_IMAGE:\s*(.*?)\]/i);
-        if (imageGenMatch) {
-          const prompt = imageGenMatch[1];
-          setApiStatusText("Generating Image...");
-          setIsLoading(true);
-          generateImage(prompt).then((generatedUrl) => {
-            setIsLoading(false);
-            const imageMsg: Message = {
-              id: crypto.randomUUID(),
-              role: 'model',
-              content: `Here is the image you requested: "${prompt}"`,
-              timestamp: new Date(),
-              imageUrl: generatedUrl
-            };
-            const updatedMessages = [...history, imageMsg];
-            setSessions(prev => prev.map(s => s.id === activeSessionId ? { ...s, messages: updatedMessages } : s));
-            if (db.isDatabaseEnabled()) db.updateSessionMessages(userProfile.email, activeSessionId, updatedMessages, newTitle).catch(console.error);
-            setApiStatusText("Synced");
-          }).catch((err) => {
-            setIsLoading(false);
-            const errorMsg: Message = { id: crypto.randomUUID(), role: 'model', content: `Image Generation Failed: ${err.message}`, timestamp: new Date() };
-            const finalMessages = [...history, errorMsg];
-            setSessions(prev => prev.map(s => s.id === activeSessionId ? { ...s, messages: finalMessages } : s));
-            setApiStatusText("Error");
-          });
-          return;
-        }
-
         const parts = fullText.split('[SPLIT]').map(p => p.trim()).filter(p => p.length > 0);
         const newMessages: Message[] = parts.map((p, i) => ({
           id: crypto.randomUUID(),

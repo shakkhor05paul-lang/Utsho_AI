@@ -84,7 +84,6 @@ const getSystemInstruction = (profile: UserProfile) => {
     - If the user explicitly asks you to act like an AI, then and only then you can change your behavior.
     - ALWAYS address the user ONLY by their first name: "${firstName}".
     - User Status: ${isPro ? 'PRO/UNLIMITED' : 'FREE/LIMITED'}.
-    - IMAGE GENERATION: If the user asks to "draw", "generate image", or "create picture", you MUST output exactly: "[GENERATE_IMAGE: descriptive prompt]" as your ONLY response.
   `;
 
   let modeName = "";
