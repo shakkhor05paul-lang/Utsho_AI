@@ -2,8 +2,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, Plus, MessageSquare, Trash2, Menu, Sparkles, LogOut, RefreshCcw, Settings, Globe, AlertCircle, Paperclip, X, Facebook, Instagram } from 'lucide-react';
 import { ChatSession, Message, UserProfile, Gender } from './types';
-import { streamChatResponse, checkApiHealth, getPoolStatus, adminResetPool, getLastNodeError } from './services/groqService';
+import { streamChatResponse, checkApiHealth, getPoolStatus, adminResetPool, getLastNodeError, getActiveKey } from './services/groqService';
 import { generateImage, getRemainingImageGenerations, getImageDailyLimit } from './services/imageService';
+import { analyzeConversation } from './services/userLearningService';
 import * as db from './services/firebaseService';
 
 const App: React.FC = () => {
@@ -264,6 +265,12 @@ const App: React.FC = () => {
         if (db.isDatabaseEnabled()) db.updateSessionMessages(userProfile.email, activeSessionId, updatedMessages, newTitle).catch(console.error);
         setPoolInfo(getPoolStatus());
         setApiStatusText("Synced");
+
+        // Background: analyze conversation to learn about the user
+        const learningKey = getActiveKey(userProfile);
+        if (learningKey) {
+          analyzeConversation(updatedMessages, userProfile, learningKey).catch(() => {});
+        }
       },
       (err) => {
         setIsLoading(false);
