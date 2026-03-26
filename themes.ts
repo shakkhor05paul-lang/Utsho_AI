@@ -1,5 +1,5 @@
 
-export type ThemeName = 'midnight' | 'daylight' | 'ocean' | 'forest' | 'sunset' | 'rose';
+export type ThemeName = 'midnight' | 'daylight' | 'ocean' | 'forest' | 'sunset' | 'rose' | 'chameleon';
 
 export interface ThemeColors {
   // Backgrounds
@@ -270,53 +270,127 @@ export const themes: Record<ThemeName, Theme> = {
       buttonSecondaryText: '#f9a8d4',
     },
   },
+  chameleon: {
+    name: 'chameleon',
+    label: 'Chameleon',
+    emoji: '🌈',
+    colors: {
+      bgPrimary: '#09090b',
+      bgSecondary: '#18181b',
+      bgTertiary: '#27272a',
+      bgInput: '#27272a',
+      bgHover: 'rgba(39,39,42,0.4)',
+      borderPrimary: '#27272a',
+      borderSecondary: '#3f3f46',
+      borderFocus: 'rgba(99,102,241,0.3)',
+      textPrimary: '#f4f4f5',
+      textSecondary: '#a1a1aa',
+      textMuted: '#71717a',
+      textInverse: '#09090b',
+      accent: '#4f46e5',
+      accentHover: '#4338ca',
+      accentShadow: 'rgba(99,102,241,0.2)',
+      accentSubtle: 'rgba(99,102,241,0.1)',
+      userBubble: '#4f46e5',
+      userBubbleShadow: 'rgba(99,102,241,0.2)',
+      botBubble: '#18181b',
+      botBubbleBorder: '#27272a',
+      statusBar: 'rgba(39,39,42,0.5)',
+      statusBarText: '#a1a1aa',
+      scrollThumb: '#27272a',
+      scrollThumbHover: '#3f3f46',
+      buttonPrimary: '#f4f4f5',
+      buttonPrimaryText: '#09090b',
+      buttonSecondary: '#27272a',
+      buttonSecondaryText: '#a1a1aa',
+    },
+  },
 };
 
-export const themeNames: ThemeName[] = ['midnight', 'daylight', 'ocean', 'forest', 'sunset', 'rose'];
+export const themeNames: ThemeName[] = ['midnight', 'daylight', 'ocean', 'forest', 'sunset', 'rose', 'chameleon'];
+
+let chameleonInterval: any = null;
 
 export function applyTheme(theme: Theme): void {
   const root = document.documentElement;
   const c = theme.colors;
 
-  root.style.setProperty('--bg-primary', c.bgPrimary);
-  root.style.setProperty('--bg-secondary', c.bgSecondary);
-  root.style.setProperty('--bg-tertiary', c.bgTertiary);
-  root.style.setProperty('--bg-input', c.bgInput);
-  root.style.setProperty('--bg-hover', c.bgHover);
+  // Stop any existing chameleon effect
+  if (chameleonInterval) {
+    clearInterval(chameleonInterval);
+    chameleonInterval = null;
+  }
 
-  root.style.setProperty('--border-primary', c.borderPrimary);
-  root.style.setProperty('--border-secondary', c.borderSecondary);
-  root.style.setProperty('--border-focus', c.borderFocus);
+  const setVars = (colors: ThemeColors) => {
+    root.style.setProperty('--bg-primary', colors.bgPrimary);
+    root.style.setProperty('--bg-secondary', colors.bgSecondary);
+    root.style.setProperty('--bg-tertiary', colors.bgTertiary);
+    root.style.setProperty('--bg-input', colors.bgInput);
+    root.style.setProperty('--bg-hover', colors.bgHover);
 
-  root.style.setProperty('--text-primary', c.textPrimary);
-  root.style.setProperty('--text-secondary', c.textSecondary);
-  root.style.setProperty('--text-muted', c.textMuted);
-  root.style.setProperty('--text-inverse', c.textInverse);
+    root.style.setProperty('--border-primary', colors.borderPrimary);
+    root.style.setProperty('--border-secondary', colors.borderSecondary);
+    root.style.setProperty('--border-focus', colors.borderFocus);
 
-  root.style.setProperty('--accent', c.accent);
-  root.style.setProperty('--accent-hover', c.accentHover);
-  root.style.setProperty('--accent-shadow', c.accentShadow);
-  root.style.setProperty('--accent-subtle', c.accentSubtle);
+    root.style.setProperty('--text-primary', colors.textPrimary);
+    root.style.setProperty('--text-secondary', colors.textSecondary);
+    root.style.setProperty('--text-muted', colors.textMuted);
+    root.style.setProperty('--text-inverse', colors.textInverse);
 
-  root.style.setProperty('--user-bubble', c.userBubble);
-  root.style.setProperty('--user-bubble-shadow', c.userBubbleShadow);
-  root.style.setProperty('--bot-bubble', c.botBubble);
-  root.style.setProperty('--bot-bubble-border', c.botBubbleBorder);
+    root.style.setProperty('--accent', colors.accent);
+    root.style.setProperty('--accent-hover', colors.accentHover);
+    root.style.setProperty('--accent-shadow', colors.accentShadow);
+    root.style.setProperty('--accent-subtle', colors.accentSubtle);
 
-  root.style.setProperty('--status-bar', c.statusBar);
-  root.style.setProperty('--status-bar-text', c.statusBarText);
+    root.style.setProperty('--user-bubble', colors.userBubble);
+    root.style.setProperty('--user-bubble-shadow', colors.userBubbleShadow);
+    root.style.setProperty('--bot-bubble', colors.botBubble);
+    root.style.setProperty('--bot-bubble-border', colors.botBubbleBorder);
 
-  root.style.setProperty('--scroll-thumb', c.scrollThumb);
-  root.style.setProperty('--scroll-thumb-hover', c.scrollThumbHover);
+    root.style.setProperty('--status-bar', colors.statusBar);
+    root.style.setProperty('--status-bar-text', colors.statusBarText);
 
-  root.style.setProperty('--btn-primary', c.buttonPrimary);
-  root.style.setProperty('--btn-primary-text', c.buttonPrimaryText);
-  root.style.setProperty('--btn-secondary', c.buttonSecondary);
-  root.style.setProperty('--btn-secondary-text', c.buttonSecondaryText);
+    root.style.setProperty('--scroll-thumb', colors.scrollThumb);
+    root.style.setProperty('--scroll-thumb-hover', colors.scrollThumbHover);
 
-  // Also update body background/color for full-page coverage
-  document.body.style.backgroundColor = c.bgPrimary;
-  document.body.style.color = c.textPrimary;
+    root.style.setProperty('--btn-primary', colors.buttonPrimary);
+    root.style.setProperty('--btn-primary-text', colors.buttonPrimaryText);
+    root.style.setProperty('--btn-secondary', colors.buttonSecondary);
+    root.style.setProperty('--btn-secondary-text', colors.buttonSecondaryText);
+
+    document.body.style.backgroundColor = colors.bgPrimary;
+    document.body.style.color = colors.textPrimary;
+  };
+
+  if (theme.name === 'chameleon') {
+    let hue = 0;
+    chameleonInterval = setInterval(() => {
+      hue = (hue + 1) % 360;
+      const accent = `hsl(${hue}, 70%, 60%)`;
+      const bg = `hsl(${hue}, 20%, 5%)`;
+      const bgSec = `hsl(${hue}, 20%, 10%)`;
+      const bgTer = `hsl(${hue}, 20%, 15%)`;
+      
+      setVars({
+        ...c,
+        accent,
+        accentHover: `hsl(${hue}, 70%, 50%)`,
+        accentShadow: `hsla(${hue}, 70%, 60%, 0.2)`,
+        accentSubtle: `hsla(${hue}, 70%, 60%, 0.1)`,
+        userBubble: accent,
+        userBubbleShadow: `hsla(${hue}, 70%, 60%, 0.2)`,
+        bgPrimary: bg,
+        bgSecondary: bgSec,
+        bgTertiary: bgTer,
+        bgInput: bgTer,
+        statusBar: `hsla(${hue}, 20%, 15%, 0.5)`,
+        buttonPrimary: `hsl(${hue}, 10%, 95%)`,
+        buttonPrimaryText: bg,
+      });
+    }, 50);
+  } else {
+    setVars(c);
+  }
 }
 
 export function getStoredTheme(): ThemeName {
