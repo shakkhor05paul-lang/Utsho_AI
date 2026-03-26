@@ -261,16 +261,16 @@ const App: React.FC = () => {
 
     // Check for image generation request
     const lowerInput = inputText.toLowerCase();
-    const isImageRequest = lowerInput.startsWith('/draw') || 
-                          lowerInput.startsWith('/image') ||
-                          lowerInput.includes('generate image') ||
-                          lowerInput.includes('generate a picture') ||
-                          lowerInput.includes('draw a picture') ||
-                          lowerInput.includes('draw me a') ||
-                          lowerInput.includes('create an image') ||
-                          lowerInput.includes('ছবি আঁকো') ||
-                          lowerInput.includes('ছবি তৈরি করো') ||
-                          lowerInput.includes('একটি ছবি');
+    const imageCommandPattern = /^\/(draw|image|imagine|paint|generate)\b/;
+    const imageNaturalPattern = /\b(generate|create|draw|paint|make|produce|render|design|imagine|sketch)\b.{0,20}\b(image|picture|photo|illustration|art|artwork|painting|drawing|pic|portrait|wallpaper|poster|scene|landscape|graphic)\b/;
+    const imageReversePattern = /\b(image|picture|photo|illustration|painting|drawing|pic|portrait|wallpaper|poster)\b.{0,20}\b(generate|create|draw|paint|make|produce|render|of|for)\b/;
+    const imageDirectPattern = /^\s*(generate|create|draw|paint|make|imagine|render|sketch)\s+(a |an |the |me )?\s*(beautiful|stunning|cool|amazing|nice|epic|realistic|detailed|fantasy|abstract|cute|dark|bright|colorful)?\s*.{2,}/;
+    const imageBanglaPattern = /ছবি আঁকো|ছবি তৈরি করো|একটি ছবি|ছবি বানাও|ছবি দাও|ছবি জেনারেট/;
+    const isImageRequest = imageCommandPattern.test(lowerInput) ||
+                          imageNaturalPattern.test(lowerInput) ||
+                          imageReversePattern.test(lowerInput) ||
+                          imageDirectPattern.test(lowerInput) ||
+                          imageBanglaPattern.test(lowerInput);
 
     if (isImageRequest) {
       // Check rate limit before attempting generation
@@ -293,11 +293,10 @@ const App: React.FC = () => {
       setApiStatusText(`Generating image... (${remaining - 1} left today)`);
       
       const imagePrompt = inputText
-        .replace(/^\/(draw|image)\s*/i, '')
-        .replace(/^generate (image|picture) of/i, '')
-        .replace(/^draw (a picture|an image) of/i, '')
-        .replace(/^create (an image|a picture) of/i, '')
-        .replace(/^(ছবি আঁকো|ছবি তৈরি করো|একটি ছবি)\s*/i, '')
+        .replace(/^\/(draw|image|imagine|paint|generate)\s*/i, '')
+        .replace(/^(generate|create|draw|paint|make|produce|render|design|imagine|sketch)\s+(a |an |the |me )?\s*(image|picture|photo|illustration|art|artwork|painting|drawing|pic|portrait|wallpaper|poster|scene|landscape|graphic)\s*(of|for|with|showing|depicting)?\s*/i, '')
+        .replace(/^(generate|create|draw|paint|make|imagine|render|sketch)\s+(a |an |the |me )?\s*/i, '')
+        .replace(/^(ছবি আঁকো|ছবি তৈরি করো|একটি ছবি|ছবি বানাও|ছবি দাও|ছবি জেনারেট)\s*/i, '')
         .trim() || "A beautiful landscape";
       const imageUrl = await generateImage(imagePrompt, userProfile.email);
 
