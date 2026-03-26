@@ -31,6 +31,13 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+// Handle messages from the client
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
 // Fetch: network-first strategy (app needs live API access)
 self.addEventListener('fetch', (event) => {
   // Skip non-GET requests and API calls
