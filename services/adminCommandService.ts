@@ -268,6 +268,14 @@ export const processAdminCommand = async (
       return { handled: true, response: `Knowledge Base (${knowledge.length} entries):\n${list}` };
     }
 
+    // /list users (or just /list)
+    if (command === "/list" && (subCommand === "users" || !subCommand)) {
+      const users = await db.getAllUsers();
+      if (users.length === 0) return { handled: true, response: "No users found in the database." };
+      const list = users.map((u, i) => `${i + 1}. ${u.name} (${u.email}) - Age: ${u.age}, Gender: ${u.gender}`).join("\n");
+      return { handled: true, response: `Registered Users (${users.length}):\n\n${list}` };
+    }
+
     // /inbox -- View all user feedback
     if (command === "/inbox") {
       const feedback = await db.getAllFeedback();
@@ -316,7 +324,7 @@ export const processAdminCommand = async (
     if (command === "/help") {
       return {
         handled: true,
-        response: `Admin Commands:\n\n--- Configuration ---\n/set directive <text> - Add global behavioral rule\n/set personality <text> - Set AI personality\n/set greeting <text> - Set greeting style\n/set config <key> <value> - Set config value\n/train <topic> :: <content> - Add to knowledge base\n/list directives - Show all directives\n/list knowledge - Show knowledge base\n/remove directive <id> - Remove a directive\n/remove knowledge <id> - Remove knowledge entry\n\n--- Feedback ---\n/inbox - View user feedback messages\n/reply <id> <message> - Reply to feedback\n/read <id> - Mark feedback as read\n\n--- System ---\n/status - Show system status\n/help - Show this help\n\n--- User Commands (all users) ---\n/feedback <message> - Send feedback to admin\n/myreplies - Check admin replies`
+        response: `Admin Commands:\n\n--- Configuration ---\n/set directive <text> - Add global behavioral rule\n/set personality <text> - Set AI personality\n/set greeting <text> - Set greeting style\n/set config <key> <value> - Set config value\n/train <topic> :: <content> - Add to knowledge base\n/list directives - Show all directives\n/list knowledge - Show knowledge base\n/list users - Show all registered users\n/remove directive <id> - Remove a directive\n/remove knowledge <id> - Remove knowledge entry\n\n--- Feedback ---\n/inbox - View user feedback messages\n/reply <id> <message> - Reply to feedback\n/read <id> - Mark feedback as read\n\n--- System ---\n/status - Show system status\n/help - Show this help\n\n--- User Commands (all users) ---\n/feedback <message> - Send feedback to admin\n/myreplies - Check admin replies`
       };
     }
 

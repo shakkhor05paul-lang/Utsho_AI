@@ -153,6 +153,13 @@ export const getUserProfile = async (email: string): Promise<UserProfile | null>
   return null;
 };
 
+export const getAllUsers = async (): Promise<UserProfile[]> => {
+  if (!db) return [];
+  const usersRef = collection(db, 'users');
+  const snap = await getDocs(usersRef);
+  return snap.docs.map(doc => doc.data() as UserProfile);
+};
+
 export const logApiKeyFailure = async (key: string, errorMessage: string) => {
   if (!db) return;
   const keyId = `key_${key.slice(-6)}`;

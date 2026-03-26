@@ -1,20 +1,24 @@
-const CACHE_NAME = 'utsho-ai-v1';
+// Versioning to force update when needed
+const VERSION = '1.0.1'; // Update this whenever the app is updated
+const CACHE_NAME = `utsho-ai-${VERSION}`;
 const STATIC_ASSETS = [
   '/',
   '/index.html',
+  '/manifest.json',
 ];
 
-// Install: cache static assets
+// Install: cache static assets and skip waiting
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(STATIC_ASSETS);
     })
   );
+  // Force the waiting service worker to become active
   self.skipWaiting();
 });
 
-// Activate: clean old caches
+// Activate: clean old caches and claim clients
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
@@ -23,6 +27,7 @@ self.addEventListener('activate', (event) => {
       );
     })
   );
+  // Take control of all open clients immediately
   self.clients.claim();
 });
 
