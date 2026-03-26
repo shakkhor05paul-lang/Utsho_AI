@@ -413,6 +413,130 @@ export const getUserFeedbackReplies = async (email: string): Promise<{
     .map(f => ({ message: f.message, reply: f.reply!, repliedAt: f.repliedAt! }));
 };
 
+// ==========================================
+// DIRECT MESSAGING (USER TO USER)
+// ==========================================
+
+/**
+ * Get or create a conversation ID between two users.
+ * Uses sorted emails to create a deterministic ID.
+ */
+const getConversationId = (email1: string, email2: string): string => {
+  const sorted = [email1.toLowerCase().trim(), email2.toLowerCase().trim()].sort();
+  return `dm_${sorted[0].replace(/[^a-z0-9]/g, '_')}__${sorted[1].replace(/[^a-z0-9]/g, '_')}`;
+};
+
+/**
+ * Send a direct message to another user.
+ */
+export const sendDirectMessage = async (fromEmail: string, fromName: string, toEmail: string, message: string) => {
+  if (!db) return;
+  const convId = getConversationId(fromEmail, toEmail);
+  const msgId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  
+  // Save the message
+  const msgRef = doc(db, 'conversations', convId, 'messages', msgId);
+  await setDoc(msgRef, {
+    id: msgId,
+    from: fromEmail.toLowerCase().trim(),
+    fromName: fromName,
+    to: toEmail.toLowerCase().trim(),
+    message: message,
+    createdAt: Timestamp.now(),
+    read: false,
+  });
+
+  // Update conversation metadata
+  const convRef = doc(db, 'conversations', convId);
+  await setDoc(convRef, {
+    participants: [fromEmail.toLowerCase().trim(), toEmail.toLowerCase().trim()].sort(),
+    lastMessage: message.slice(0, 100),
+    lastMessageFrom: fromEmail.toLowerCase().trim(),
+    lastMessageAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+  }, { merge: true });
+};
+
+/**
+ * Get all conversations for a user.
+ */
+export const getUserConversations = async (email: string): Promise<{
+  id: string;
+  participants: string[];
+  otherEmail: string;
+  lastMessage: string;
+  lastMessageFrom: string;
+  lastMessageAt: Date;
+}[]> => {
+  if (!db) return [];
+  const normalizedEmail = email.toLowerCase().trim();
+  // Get all conversations - we'll filter client-side since Firestore
+  // array-contains works for this
+  const ref = collection(db, 'conversations');
+  const q = query(ref, orderBy('updatedAt', 'desc'));
+  const snap = await getDocs(q);
+  
+  return snap.docs
+    .filter(d => {
+      const data = d.data();
+      return data.participants && data.participants.includes(normalizedEmail);
+    })
+    .map(d => {
+      const data = d.data();
+      const otherEmail = data.participants.find((p: string) => p !== normalizedEmail) || '';
+      return {
+        id: d.id,
+        participants: data.participants,
+        otherEmail,
+        lastMessage: data.lastMessage || '',
+        lastMessageFrom: data.lastMessageFrom || '',
+        lastMessageAt: data.lastMessageAt instanceof Timestamp ? data.lastMessageAt.toDate() : new Date(),
+      };
+    });
+};
+
+/**
+ * Get messages in a conversation.
+ */
+export const getConversationMessages = async (fromEmail: string, toEmail: string): Promise<{
+  id: string;
+  from: string;
+  fromName: string;
+  to: string;
+  message: string;
+  createdAt: Date;
+  read: boolean;
+}[]> => {
+  if (!db) return [];
+  const convId = getConversationId(fromEmail, toEmail);
+  const ref = collection(db, 'conversations', convId, 'messages');
+  const q = query(ref, orderBy('createdAt', 'asc'));
+  const snap = await getDocs(q);
+  
+  return snap.docs.map(d => {
+    const data = d.data();
+    return {
+      id: d.id,
+      from: data.from,
+      fromName: data.fromName || data.from,
+      to: data.to,
+      message: data.message,
+      createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(),
+      read: data.read || false,
+    };
+  });
+};
+
+/**
+ * Check if a user exists in the system.
+ */
+export const checkUserExists = async (email: string): Promise<boolean> => {
+  if (!db) return false;
+  const userRef = doc(db, 'users', email.toLowerCase().trim());
+  const snap = await getDoc(userRef);
+  return snap.exists();
+};
+
 /**
  * Save the full user learning context to Firebase.
  * Stored as a subcollection document for structured persistence.
