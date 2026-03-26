@@ -579,13 +579,16 @@ const App: React.FC = () => {
                     <button onClick={async () => {
                       if (!dmNewEmail.trim() || !dmNewEmail.includes('@')) { setDmError('Enter a valid email'); return; }
                       if (dmNewEmail.toLowerCase().trim() === userProfile!.email.toLowerCase()) { setDmError('Cannot message yourself'); return; }
-                      const exists = await db.checkUserExists(dmNewEmail.trim());
-                      if (!exists) { setDmError('User not found'); return; }
-                      setDmChatWith(dmNewEmail.trim().toLowerCase());
-                      const msgs = await db.getConversationMessages(userProfile!.email, dmNewEmail.trim());
-                      setDmChatMessages(msgs);
-                      setDmView('chat');
-                      setDmNewEmail('');
+                      try {
+                        setDmChatWith(dmNewEmail.trim().toLowerCase());
+                        const msgs = await db.getConversationMessages(userProfile!.email, dmNewEmail.trim());
+                        setDmChatMessages(msgs);
+                        setDmView('chat');
+                        setDmNewEmail('');
+                        setDmError('');
+                      } catch (err: any) {
+                        setDmError('Failed to open chat: ' + (err.message || 'unknown error'));
+                      }
                     }} className="px-4 py-2.5 rounded-xl text-sm font-bold text-white" style={{ backgroundColor: c.accent }}>Chat</button>
                   </div>
                   {dmError && <p className="text-xs text-red-400 pl-1">{dmError}</p>}
