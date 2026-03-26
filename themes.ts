@@ -315,10 +315,11 @@ export function applyTheme(theme: Theme): void {
   const root = document.documentElement;
   const c = theme.colors;
 
-  // Stop any existing chameleon effect
+  // Stop any existing chameleon effect and remove transition
   if (chameleonInterval) {
     clearInterval(chameleonInterval);
     chameleonInterval = null;
+    root.style.transition = '';
   }
 
   const setVars = (colors: ThemeColors) => {
@@ -364,8 +365,11 @@ export function applyTheme(theme: Theme): void {
 
   if (theme.name === 'chameleon') {
     let hue = 0;
+    // Add a smooth transition to the root for all color changes
+    root.style.transition = 'background-color 0.5s linear, border-color 0.5s linear, color 0.5s linear, box-shadow 0.5s linear';
+    
     chameleonInterval = setInterval(() => {
-      hue = (hue + 1) % 360;
+      hue = (hue + 0.5) % 360; // Smaller step for smoother transition
       const accent = `hsl(${hue}, 70%, 60%)`;
       const bg = `hsl(${hue}, 20%, 5%)`;
       const bgSec = `hsl(${hue}, 20%, 10%)`;
@@ -387,7 +391,7 @@ export function applyTheme(theme: Theme): void {
         buttonPrimary: `hsl(${hue}, 10%, 95%)`,
         buttonPrimaryText: bg,
       });
-    }, 50);
+    }, 100); // Slightly slower interval but with CSS transition for "liquid" feel
   } else {
     setVars(c);
   }
