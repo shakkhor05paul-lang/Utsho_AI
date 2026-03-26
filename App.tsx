@@ -347,16 +347,23 @@ const App: React.FC = () => {
 
     // Check for image generation request
     const lowerInput = inputText.toLowerCase();
+    // Words that indicate this is NOT an image request (code/text generation)
+    const notImageWords = /\b(code|function|program|script|algorithm|class|variable|array|loop|api|html|css|bug|error|fix|debug|compile|syntax|database|sql|json|server|endpoint)\b/;
+    const isNotImage = notImageWords.test(lowerInput);
+    // Simple triggers: /command, "generate X", "draw X", "create X", etc.
     const imageCommandPattern = /^\/(draw|image|imagine|paint|generate)\b/;
-    const imageNaturalPattern = /\b(generate|create|draw|paint|make|produce|render|design|imagine|sketch)\b.{0,20}\b(image|picture|photo|illustration|art|artwork|painting|drawing|pic|portrait|wallpaper|poster|scene|landscape|graphic)\b/;
-    const imageReversePattern = /\b(image|picture|photo|illustration|painting|drawing|pic|portrait|wallpaper|poster)\b.{0,20}\b(generate|create|draw|paint|make|produce|render|of|for)\b/;
-    const imageDirectPattern = /^\s*(generate|create|draw|paint|make|imagine|render|sketch)\s+(a |an |the |me )?\s*(beautiful|stunning|cool|amazing|nice|epic|realistic|detailed|fantasy|abstract|cute|dark|bright|colorful)?\s*.{2,}/;
-    const imageBanglaPattern = /ছবি আঁকো|ছবি তৈরি করো|একটি ছবি|ছবি বানাও|ছবি দাও|ছবি জেনারেট/;
-    const isImageRequest = imageCommandPattern.test(lowerInput) ||
-                          imageNaturalPattern.test(lowerInput) ||
-                          imageReversePattern.test(lowerInput) ||
-                          imageDirectPattern.test(lowerInput) ||
-                          imageBanglaPattern.test(lowerInput);
+    // Any message starting with a creative verb (most intuitive)
+    const imageStartPattern = /^\s*(generate|create|draw|paint|make|imagine|render|sketch|design)\s+(a |an |the |me |my )?\s*\w/i;
+    // Messages mentioning image/picture/photo with any context
+    const imageWordPattern = /\b(image|picture|photo|illustration|drawing|painting|wallpaper|portrait|artwork|pic)\b/;
+    // Bangla triggers
+    const imageBanglaPattern = /ছবি|আঁকো|তৈরি করো|বানাও|জেনারেট/;
+    const isImageRequest = !isNotImage && (
+      imageCommandPattern.test(lowerInput) ||
+      imageStartPattern.test(lowerInput) ||
+      imageWordPattern.test(lowerInput) ||
+      imageBanglaPattern.test(lowerInput)
+    );
 
     if (isImageRequest) {
       // Check rate limit before attempting generation
@@ -379,10 +386,16 @@ const App: React.FC = () => {
       setApiStatusText(`Generating image... (${remaining - 1} left today)`);
       
       const imagePrompt = inputText
+        // Strip slash commands
         .replace(/^\/(draw|image|imagine|paint|generate)\s*/i, '')
-        .replace(/^(generate|create|draw|paint|make|produce|render|design|imagine|sketch)\s+(a |an |the |me )?\s*(image|picture|photo|illustration|art|artwork|painting|drawing|pic|portrait|wallpaper|poster|scene|landscape|graphic)\s*(of|for|with|showing|depicting)?\s*/i, '')
-        .replace(/^(generate|create|draw|paint|make|imagine|render|sketch)\s+(a |an |the |me )?\s*/i, '')
-        .replace(/^(ছবি আঁকো|ছবি তৈরি করো|একটি ছবি|ছবি বানাও|ছবি দাও|ছবি জেনারেট)\s*/i, '')
+        // Strip "generate/create/draw a image/picture of" patterns
+        .replace(/^(generate|create|draw|paint|make|produce|render|design|imagine|sketch)\s+(a |an |the |me |my )?\s*(image|picture|photo|illustration|art|artwork|painting|drawing|pic|portrait|wallpaper|poster|scene|landscape|graphic)\s*(of|for|with|showing|depicting)?\s*/i, '')
+        // Strip standalone verb starts like "Generate the beautiful Moon" -> "the beautiful Moon"
+        .replace(/^(generate|create|draw|paint|make|imagine|render|sketch|design)\s+(a |an |the |me |my )?\s*/i, '')
+        // Strip image/picture word when it appears as subject: "a picture of sunset" -> "sunset"
+        .replace(/^(a |an |the )?(image|picture|photo|illustration|drawing|painting|pic|portrait|artwork)\s*(of|for|with|showing|depicting)?\s*/i, '')
+        // Strip Bangla triggers
+        .replace(/(ছবি আঁকো|ছবি তৈরি করো|একটি ছবি|ছবি বানাও|ছবি দাও|ছবি জেনারেট|ছবি)\s*/gi, '')
         .trim() || "A beautiful landscape";
       const imageUrl = await generateImage(imagePrompt, userProfile.email);
 
