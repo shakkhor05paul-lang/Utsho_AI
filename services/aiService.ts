@@ -20,17 +20,77 @@ const _ep = (): string => {
 };
 
 /**
- * Default model identifiers (encoded for security).
+ * Model fallback chain -- tries larger models first, falls back to smaller ones.
+ * Cached after first successful probe to avoid repeated 404s.
  */
-const _dm = (): string => {
-  // llama-3.3-70b-versatile (most capable reliably-available free model on Groq)
-  const d = [108,108,97,109,97,45,51,46,51,45,55,48,98,45,118,101,114,115,97,116,105,108,101];
-  return d.map(c => String.fromCharCode(c)).join('');
-};
-const _vm = (): string => {
-  // llama-3.2-11b-vision-preview (vision-capable free model on Groq)
-  const d = [108,108,97,109,97,45,51,46,50,45,49,49,98,45,118,105,115,105,111,110,45,112,114,101,118,105,101,119];
-  return d.map(c => String.fromCharCode(c)).join('');
+let _cachedModel: string | null = null;
+let _cachedVisionModel: string | null = null;
+
+// Text models ordered by size (largest first)
+const _textModels = (): string[] => [
+  // ~400B+ MoE total params
+  [109,101,116,97,45,108,108,97,109,97,47,108,108,97,109,97,45,52,45,109,97,118,101,114,105,99,107,45,49,55,98,45,49,50,56,101,45,105,110,115,116,114,117,99,116].map(c => String.fromCharCode(c)).join(''),
+  // ~109B MoE total params
+  [109,101,116,97,45,108,108,97,109,97,47,108,108,97,109,97,45,52,45,115,99,111,117,116,45,49,55,98,45,49,54,101,45,105,110,115,116,114,117,99,116].map(c => String.fromCharCode(c)).join(''),
+  // 70B dense
+  [108,108,97,109,97,45,51,46,51,45,55,48,98,45,118,101,114,115,97,116,105,108,101].map(c => String.fromCharCode(c)).join(''),
+];
+
+// Vision models ordered by capability
+const _visionModels = (): string[] => [
+  // Llama 4 Scout (multimodal, ~109B MoE)
+  [109,101,116,97,45,108,108,97,109,97,47,108,108,97,109,97,45,52,45,115,99,111,117,116,45,49,55,98,45,49,54,101,45,105,110,115,116,114,117,99,116].map(c => String.fromCharCode(c)).join(''),
+  // Llama 3.2 11B vision
+  [108,108,97,109,97,45,51,46,50,45,49,49,98,45,118,105,115,105,111,110,45,112,114,101,118,105,101,119].map(c => String.fromCharCode(c)).join(''),
+];
+
+// Default fallbacks
+const _dm = (): string => _cachedModel || _textModels()[_textModels().length - 1];
+const _vm = (): string => _cachedVisionModel || _visionModels()[_visionModels().length - 1];
+
+/**
+ * Probe which model works on this API key and cache it.
+ * Called once during health check, then cached for the session.
+ */
+const probeModels = async (apiKey: string): Promise<void> => {
+  const client = new OpenAI({ apiKey, baseURL: _ep(), dangerouslyAllowBrowser: true });
+  
+  // Probe text models (largest first)
+  if (!_cachedModel) {
+    for (const model of _textModels()) {
+      try {
+        await client.chat.completions.create({
+          model, messages: [{ role: 'user', content: 'hi' }], max_tokens: 1
+        });
+        _cachedModel = model;
+        console.log(`AI_SERVICE: Text model locked: ${model}`);
+        break;
+      } catch (e: any) {
+        if (e.status === 404) continue; // Model not available, try next
+        // Other errors (rate limit, etc.) -- assume model exists
+        _cachedModel = model;
+        break;
+      }
+    }
+  }
+
+  // Probe vision models
+  if (!_cachedVisionModel) {
+    for (const model of _visionModels()) {
+      try {
+        await client.chat.completions.create({
+          model, messages: [{ role: 'user', content: 'hi' }], max_tokens: 1
+        });
+        _cachedVisionModel = model;
+        console.log(`AI_SERVICE: Vision model locked: ${model}`);
+        break;
+      } catch (e: any) {
+        if (e.status === 404) continue;
+        _cachedVisionModel = model;
+        break;
+      }
+    }
+  }
 };
 
 /**
@@ -82,9 +142,13 @@ const getPoolKeys = (): string[] => {
 
 export const adminResetPool = () => {
   keyBlacklist.clear();
+  _cachedModel = null;
+  _cachedVisionModel = null;
   lastNodeError = "None";
   return getPoolStatus();
 };
+
+export const getCurrentModelName = () => _cachedModel || "detecting...";
 
 export const getLastNodeError = () => lastNodeError;
 
@@ -255,6 +319,12 @@ export const checkApiHealth = async (profile?: UserProfile): Promise<{healthy: b
   const key = getActiveKey(profile);
   if (!key) return { healthy: false, error: "No Active Key Found" };
   try {
+    // Probe for best available models on first health check
+    const isCustomKey = profile?.customApiKey?.trim() === key;
+    if (!isCustomKey) {
+      await probeModels(key);
+    }
+    
     const { client, model } = createClient(key, profile);
     await client.chat.completions.create({
       model: model,
