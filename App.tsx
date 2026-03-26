@@ -39,6 +39,15 @@ const App: React.FC = () => {
   const [feedbackInput, setFeedbackInput] = useState('');
   const [feedbackReplyTo, setFeedbackReplyTo] = useState<string | null>(null);
   const [feedbackReplyInput, setFeedbackReplyInput] = useState('');
+  
+  // Direct messaging state
+  const [dmView, setDmView] = useState<'feedback' | 'conversations' | 'chat'>('feedback');
+  const [dmConversations, setDmConversations] = useState<any[]>([]);
+  const [dmChatMessages, setDmChatMessages] = useState<any[]>([]);
+  const [dmChatWith, setDmChatWith] = useState('');
+  const [dmInput, setDmInput] = useState('');
+  const [dmNewEmail, setDmNewEmail] = useState('');
+  const [dmError, setDmError] = useState('');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -512,142 +521,123 @@ const App: React.FC = () => {
 
       {isFeedbackOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 backdrop-blur-sm bg-black/50">
-          <div className="border rounded-3xl w-full max-w-lg shadow-2xl flex flex-col" style={{ backgroundColor: c.bgSecondary, borderColor: c.borderPrimary, maxHeight: '80vh' }}>
-            {/* Header */}
-            <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: c.borderPrimary }}>
-              <h3 className="text-lg font-bold flex items-center gap-2" style={{ color: c.accent }}>
-                <MessageSquare size={20} /> {isAdmin ? 'User Feedback Inbox' : 'Contact Admin'}
-              </h3>
-              <button onClick={() => { setIsFeedbackOpen(false); setFeedbackReplyTo(null); }} className="p-1 transition-colors hover:text-red-400" style={{ color: c.textMuted }}><X size={20} /></button>
+          <div className="border rounded-3xl w-full max-w-lg shadow-2xl flex flex-col" style={{ backgroundColor: c.bgSecondary, borderColor: c.borderPrimary, maxHeight: '85vh' }}>
+            {/* Header with tabs */}
+            <div className="border-b" style={{ borderColor: c.borderPrimary }}>
+              <div className="flex items-center justify-between p-4 pb-0">
+                <h3 className="text-lg font-bold" style={{ color: c.accent }}>Messages</h3>
+                <button onClick={() => { setIsFeedbackOpen(false); setFeedbackReplyTo(null); setDmView('feedback'); }} className="p-1 transition-colors hover:text-red-400" style={{ color: c.textMuted }}><X size={20} /></button>
+              </div>
+              <div className="flex gap-1 px-4 pt-3">
+                <button onClick={() => setDmView('feedback')} className="px-4 py-2 text-xs font-bold rounded-t-xl transition-colors" style={{ backgroundColor: dmView === 'feedback' ? c.bgTertiary : 'transparent', color: dmView === 'feedback' ? c.accent : c.textMuted }}>{isAdmin ? 'Inbox' : 'Admin'}</button>
+                <button onClick={async () => { setDmView('conversations'); if (db.isDatabaseEnabled()) { const convs = await db.getUserConversations(userProfile!.email); setDmConversations(convs); } }} className="px-4 py-2 text-xs font-bold rounded-t-xl transition-colors" style={{ backgroundColor: dmView === 'conversations' || dmView === 'chat' ? c.bgTertiary : 'transparent', color: dmView === 'conversations' || dmView === 'chat' ? c.accent : c.textMuted }}>Direct Messages</button>
+              </div>
             </div>
 
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3" style={{ minHeight: '200px' }}>
-              {feedbackMessages.length === 0 ? (
-                <div className="text-center py-8" style={{ color: c.textMuted }}>
-                  <MessageSquare size={40} className="mx-auto mb-3 opacity-30" />
-                  <p className="text-sm font-medium">{isAdmin ? 'No feedback messages yet.' : 'No messages yet. Send your first message below!'}</p>
-                </div>
-              ) : (
-                feedbackMessages.map((msg: any) => (
+            {/* FEEDBACK TAB */}
+            {dmView === 'feedback' && (<>
+              <div className="flex-1 overflow-y-auto p-4 space-y-3" style={{ minHeight: '200px' }}>
+                {feedbackMessages.length === 0 ? (
+                  <div className="text-center py-8" style={{ color: c.textMuted }}>
+                    <MessageSquare size={40} className="mx-auto mb-3 opacity-30" />
+                    <p className="text-sm font-medium">{isAdmin ? 'No feedback yet.' : 'Send a message to the admin!'}</p>
+                  </div>
+                ) : feedbackMessages.map((msg: any) => (
                   <div key={msg.id} className="space-y-1">
-                    {/* User message */}
                     <div className="flex gap-2 items-start">
                       <div className="flex-1">
-                        {isAdmin && (
-                          <div className="text-[10px] font-bold mb-1" style={{ color: c.textMuted }}>
-                            {msg.fromName} ({msg.fromEmail}) {!msg.read && <span style={{ color: '#ef4444' }}>NEW</span>}
-                          </div>
-                        )}
-                        <div className="rounded-2xl rounded-tl-sm px-4 py-2.5 text-sm" style={{ backgroundColor: c.bgTertiary, color: c.textPrimary }}>
-                          {msg.message}
-                        </div>
-                        <div className="text-[9px] mt-0.5 pl-1" style={{ color: c.textMuted }}>
-                          {msg.createdAt instanceof Date ? msg.createdAt.toLocaleDateString() : ''}
-                        </div>
+                        {isAdmin && <div className="text-[10px] font-bold mb-1" style={{ color: c.textMuted }}>{msg.fromName} {!msg.read && <span style={{ color: '#ef4444' }}>NEW</span>}</div>}
+                        <div className="rounded-2xl rounded-tl-sm px-4 py-2.5 text-sm" style={{ backgroundColor: c.bgTertiary, color: c.textPrimary }}>{msg.message}</div>
                       </div>
                     </div>
-                    {/* Admin reply */}
-                    {msg.reply && (
-                      <div className="flex gap-2 items-start justify-end">
-                        <div>
-                          <div className="rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm text-white" style={{ backgroundColor: c.accent }}>
-                            {msg.reply}
-                          </div>
-                          <div className="text-[9px] mt-0.5 pr-1 text-right" style={{ color: c.textMuted }}>
-                            Admin {msg.repliedAt instanceof Date ? msg.repliedAt.toLocaleDateString() : ''}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    {/* Admin reply button */}
-                    {isAdmin && !msg.reply && (
-                      <button 
-                        onClick={() => { setFeedbackReplyTo(msg.id); setFeedbackReplyInput(''); }}
-                        className="text-[10px] font-bold ml-2 transition-colors"
-                        style={{ color: c.accent }}
-                      >
-                        Reply
-                      </button>
-                    )}
-                    {/* Reply input for this message */}
+                    {msg.reply && <div className="flex justify-end"><div className="rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm text-white" style={{ backgroundColor: c.accent }}>{msg.reply}</div></div>}
+                    {isAdmin && !msg.reply && <button onClick={() => { setFeedbackReplyTo(msg.id); setFeedbackReplyInput(''); }} className="text-[10px] font-bold ml-2" style={{ color: c.accent }}>Reply</button>}
                     {isAdmin && feedbackReplyTo === msg.id && (
                       <div className="flex gap-2 ml-4">
-                        <input
-                          type="text"
-                          value={feedbackReplyInput}
-                          onChange={e => setFeedbackReplyInput(e.target.value)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter' && feedbackReplyInput.trim()) {
-                              db.replyToFeedback(msg.id, feedbackReplyInput.trim());
-                              const updated = feedbackMessages.map((m: any) => m.id === msg.id ? { ...m, reply: feedbackReplyInput.trim(), repliedAt: new Date(), read: true } : m);
-                              setFeedbackMessages(updated);
-                              setFeedbackReplyTo(null);
-                            }
-                          }}
-                          placeholder="Type your reply..."
-                          className="flex-1 px-3 py-2 rounded-xl text-sm outline-none border"
-                          style={{ backgroundColor: c.bgTertiary, borderColor: c.borderPrimary, color: c.textPrimary }}
-                          autoFocus
-                        />
-                        <button
-                          onClick={() => {
-                            if (feedbackReplyInput.trim()) {
-                              db.replyToFeedback(msg.id, feedbackReplyInput.trim());
-                              const updated = feedbackMessages.map((m: any) => m.id === msg.id ? { ...m, reply: feedbackReplyInput.trim(), repliedAt: new Date(), read: true } : m);
-                              setFeedbackMessages(updated);
-                              setFeedbackReplyTo(null);
-                            }
-                          }}
-                          className="px-3 py-2 rounded-xl text-sm font-bold text-white"
-                          style={{ backgroundColor: c.accent }}
-                        >
-                          <Send size={14} />
-                        </button>
+                        <input value={feedbackReplyInput} onChange={e => setFeedbackReplyInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && feedbackReplyInput.trim()) { db.replyToFeedback(msg.id, feedbackReplyInput.trim()); setFeedbackMessages(feedbackMessages.map((m: any) => m.id === msg.id ? { ...m, reply: feedbackReplyInput.trim(), read: true } : m)); setFeedbackReplyTo(null); }}} placeholder="Reply..." className="flex-1 px-3 py-2 rounded-xl text-sm outline-none border" style={{ backgroundColor: c.bgTertiary, borderColor: c.borderPrimary, color: c.textPrimary }} autoFocus />
+                        <button onClick={() => { if (feedbackReplyInput.trim()) { db.replyToFeedback(msg.id, feedbackReplyInput.trim()); setFeedbackMessages(feedbackMessages.map((m: any) => m.id === msg.id ? { ...m, reply: feedbackReplyInput.trim(), read: true } : m)); setFeedbackReplyTo(null); }}} className="p-2 rounded-xl text-white" style={{ backgroundColor: c.accent }}><Send size={14} /></button>
                       </div>
                     )}
                   </div>
-                ))
+                ))}
+              </div>
+              {!isAdmin && (
+                <div className="p-4 border-t flex gap-2" style={{ borderColor: c.borderPrimary }}>
+                  <input value={feedbackInput} onChange={e => setFeedbackInput(e.target.value)} onKeyDown={async e => { if (e.key === 'Enter' && feedbackInput.trim()) { const id = `fb_${Date.now()}`; const newMsg = { id, fromEmail: userProfile!.email.toLowerCase(), fromName: userProfile!.name, message: feedbackInput.trim(), createdAt: new Date(), read: false }; await db.saveFeedback(newMsg); setFeedbackMessages((prev: any) => [...prev, newMsg]); setFeedbackInput(''); }}} placeholder="Message admin..." className="flex-1 px-4 py-3 rounded-2xl text-sm outline-none border" style={{ backgroundColor: c.bgTertiary, borderColor: c.borderPrimary, color: c.textPrimary }} />
+                  <button onClick={async () => { if (feedbackInput.trim()) { const id = `fb_${Date.now()}`; const newMsg = { id, fromEmail: userProfile!.email.toLowerCase(), fromName: userProfile!.name, message: feedbackInput.trim(), createdAt: new Date(), read: false }; await db.saveFeedback(newMsg); setFeedbackMessages((prev: any) => [...prev, newMsg]); setFeedbackInput(''); }}} className="p-3 rounded-2xl transition-all active:scale-90" style={{ backgroundColor: feedbackInput.trim() ? c.accent : c.bgTertiary, color: feedbackInput.trim() ? '#fff' : c.textMuted }}><Send size={18} /></button>
+                </div>
               )}
-            </div>
+            </>)}
 
-            {/* User send feedback input (non-admin only) */}
-            {!isAdmin && (
-              <div className="p-4 border-t flex gap-2" style={{ borderColor: c.borderPrimary }}>
-                <input
-                  type="text"
-                  value={feedbackInput}
-                  onChange={e => setFeedbackInput(e.target.value)}
-                  onKeyDown={async e => {
-                    if (e.key === 'Enter' && feedbackInput.trim()) {
-                      const id = `fb_${Date.now()}`;
-                      const newMsg = { id, fromEmail: userProfile!.email.toLowerCase(), fromName: userProfile!.name, message: feedbackInput.trim(), createdAt: new Date(), read: false };
-                      await db.saveFeedback(newMsg);
-                      setFeedbackMessages(prev => [...prev, newMsg]);
-                      setFeedbackInput('');
-                    }
-                  }}
-                  placeholder="Type your message to admin..."
-                  className="flex-1 px-4 py-3 rounded-2xl text-sm outline-none border"
-                  style={{ backgroundColor: c.bgTertiary, borderColor: c.borderPrimary, color: c.textPrimary }}
-                />
-                <button
-                  onClick={async () => {
-                    if (feedbackInput.trim()) {
-                      const id = `fb_${Date.now()}`;
-                      const newMsg = { id, fromEmail: userProfile!.email.toLowerCase(), fromName: userProfile!.name, message: feedbackInput.trim(), createdAt: new Date(), read: false };
-                      await db.saveFeedback(newMsg);
-                      setFeedbackMessages(prev => [...prev, newMsg]);
-                      setFeedbackInput('');
-                    }
-                  }}
-                  className="p-3 rounded-2xl text-white transition-all active:scale-90"
-                  style={{ backgroundColor: feedbackInput.trim() ? c.accent : c.bgTertiary, color: feedbackInput.trim() ? '#fff' : c.textMuted }}
-                >
-                  <Send size={18} />
-                </button>
+            {/* DM CONVERSATIONS LIST */}
+            {dmView === 'conversations' && (
+              <div className="flex-1 overflow-y-auto" style={{ minHeight: '200px' }}>
+                {/* New conversation input */}
+                <div className="p-4 border-b space-y-2" style={{ borderColor: c.borderPrimary }}>
+                  <div className="flex gap-2">
+                    <input value={dmNewEmail} onChange={e => { setDmNewEmail(e.target.value); setDmError(''); }} placeholder="Enter user's email to chat..." className="flex-1 px-3 py-2.5 rounded-xl text-sm outline-none border" style={{ backgroundColor: c.bgTertiary, borderColor: c.borderPrimary, color: c.textPrimary }} />
+                    <button onClick={async () => {
+                      if (!dmNewEmail.trim() || !dmNewEmail.includes('@')) { setDmError('Enter a valid email'); return; }
+                      if (dmNewEmail.toLowerCase().trim() === userProfile!.email.toLowerCase()) { setDmError('Cannot message yourself'); return; }
+                      const exists = await db.checkUserExists(dmNewEmail.trim());
+                      if (!exists) { setDmError('User not found'); return; }
+                      setDmChatWith(dmNewEmail.trim().toLowerCase());
+                      const msgs = await db.getConversationMessages(userProfile!.email, dmNewEmail.trim());
+                      setDmChatMessages(msgs);
+                      setDmView('chat');
+                      setDmNewEmail('');
+                    }} className="px-4 py-2.5 rounded-xl text-sm font-bold text-white" style={{ backgroundColor: c.accent }}>Chat</button>
+                  </div>
+                  {dmError && <p className="text-xs text-red-400 pl-1">{dmError}</p>}
+                </div>
+                {/* Conversation list */}
+                {dmConversations.length === 0 ? (
+                  <div className="text-center py-8" style={{ color: c.textMuted }}>
+                    <p className="text-sm">No conversations yet. Enter an email above to start chatting!</p>
+                  </div>
+                ) : dmConversations.map((conv: any) => (
+                  <button key={conv.id} onClick={async () => { setDmChatWith(conv.otherEmail); const msgs = await db.getConversationMessages(userProfile!.email, conv.otherEmail); setDmChatMessages(msgs); setDmView('chat'); }} className="w-full flex items-center gap-3 p-4 border-b transition-colors text-left" style={{ borderColor: c.borderPrimary }} onMouseEnter={e => (e.currentTarget.style.backgroundColor = c.bgTertiary)} onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm" style={{ backgroundColor: c.accent }}>{conv.otherEmail[0].toUpperCase()}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-bold truncate" style={{ color: c.textPrimary }}>{conv.otherEmail}</div>
+                      <div className="text-xs truncate" style={{ color: c.textMuted }}>{conv.lastMessage}</div>
+                    </div>
+                    <div className="text-[9px]" style={{ color: c.textMuted }}>{conv.lastMessageAt instanceof Date ? conv.lastMessageAt.toLocaleDateString() : ''}</div>
+                  </button>
+                ))}
               </div>
             )}
+
+            {/* DM CHAT VIEW */}
+            {dmView === 'chat' && (<>
+              {/* Chat header */}
+              <div className="flex items-center gap-3 px-4 py-3 border-b" style={{ borderColor: c.borderPrimary }}>
+                <button onClick={() => setDmView('conversations')} className="p-1" style={{ color: c.textMuted }}>&larr;</button>
+                <div className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs" style={{ backgroundColor: c.accent }}>{dmChatWith[0]?.toUpperCase()}</div>
+                <div className="text-sm font-bold" style={{ color: c.textPrimary }}>{dmChatWith}</div>
+              </div>
+              {/* Messages */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-2" style={{ minHeight: '200px' }}>
+                {dmChatMessages.length === 0 ? (
+                  <div className="text-center py-8" style={{ color: c.textMuted }}><p className="text-sm">Start the conversation!</p></div>
+                ) : dmChatMessages.map((msg: any) => {
+                  const isMe = msg.from === userProfile!.email.toLowerCase();
+                  return (
+                    <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`rounded-2xl px-4 py-2.5 text-sm max-w-[75%] ${isMe ? 'rounded-tr-sm text-white' : 'rounded-tl-sm'}`} style={{ backgroundColor: isMe ? c.accent : c.bgTertiary, color: isMe ? '#fff' : c.textPrimary }}>
+                        {msg.message}
+                        <div className={`text-[9px] mt-1 ${isMe ? 'text-white/60' : ''}`} style={isMe ? {} : { color: c.textMuted }}>{msg.createdAt instanceof Date ? msg.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Send message */}
+              <div className="p-4 border-t flex gap-2" style={{ borderColor: c.borderPrimary }}>
+                <input value={dmInput} onChange={e => setDmInput(e.target.value)} onKeyDown={async e => { if (e.key === 'Enter' && dmInput.trim()) { await db.sendDirectMessage(userProfile!.email, userProfile!.name, dmChatWith, dmInput.trim()); setDmChatMessages((prev: any) => [...prev, { id: `msg_${Date.now()}`, from: userProfile!.email.toLowerCase(), fromName: userProfile!.name, to: dmChatWith, message: dmInput.trim(), createdAt: new Date(), read: false }]); setDmInput(''); }}} placeholder="Type a message..." className="flex-1 px-4 py-3 rounded-2xl text-sm outline-none border" style={{ backgroundColor: c.bgTertiary, borderColor: c.borderPrimary, color: c.textPrimary }} />
+                <button onClick={async () => { if (dmInput.trim()) { await db.sendDirectMessage(userProfile!.email, userProfile!.name, dmChatWith, dmInput.trim()); setDmChatMessages((prev: any) => [...prev, { id: `msg_${Date.now()}`, from: userProfile!.email.toLowerCase(), fromName: userProfile!.name, to: dmChatWith, message: dmInput.trim(), createdAt: new Date(), read: false }]); setDmInput(''); }}} className="p-3 rounded-2xl transition-all active:scale-90" style={{ backgroundColor: dmInput.trim() ? c.accent : c.bgTertiary, color: dmInput.trim() ? '#fff' : c.textMuted }}><Send size={18} /></button>
+              </div>
+            </>)}
           </div>
         </div>
       )}
