@@ -4,7 +4,7 @@ import { Send, Plus, MessageSquare, Trash2, Menu, Sparkles, LogOut, RefreshCcw, 
 import { ChatSession, Message, UserProfile, Gender, ApiProvider } from './types';
 import { streamChatResponse, checkApiHealth, getPoolStatus, adminResetPool, getLastNodeError, getActiveKey } from './services/aiService';
 import { generateImage, getRemainingImageGenerations, getImageDailyLimit } from './services/imageService';
-import { analyzeConversation, selfAssessResponse, deepReflection } from './services/userLearningService';
+import { analyzeConversation, selfAssessResponse, deepReflection, loadUserContextFromFirebase } from './services/userLearningService';
 import { parseFile, detectFileType, getFileTypeLabel } from './services/fileParserService';
 import * as db from './services/firebaseService';
 import { useTheme } from './ThemeContext';
@@ -76,6 +76,8 @@ const App: React.FC = () => {
             console.error("Cloud boot error:", e);
           }
         }
+        // Load learned user context from Firebase (merges with localStorage)
+        loadUserContextFromFirebase(localProfile.email).catch(console.error);
         await performHealthCheck(localProfile);
       }
     };
@@ -102,6 +104,8 @@ const App: React.FC = () => {
         const s = await db.getSessions(googleUser.email);
         setSessions(s);
         if (s.length > 0) setActiveSessionId(s[0].id); else createNewSession(googleUser.email);
+        // Load learned context from Firebase on login
+        loadUserContextFromFirebase(googleUser.email).catch(console.error);
       } else {
         setUserProfile(googleUser);
         setOnboardingStep(2);

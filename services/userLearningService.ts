@@ -3,6 +3,9 @@ import OpenAI from "openai";
 import { Message, UserProfile } from "../types";
 import * as db from "./firebaseService";
 
+// Track which users have had their context loaded from Firebase
+const firebaseContextLoaded = new Set<string>();
+
 const LEARNING_STORAGE_PREFIX = "utsho_user_context_";
 const ANALYSIS_COOLDOWN_PREFIX = "utsho_analysis_ts_";
 const SELF_ASSESS_PREFIX = "utsho_selfassess_ts_";
@@ -97,15 +100,91 @@ const saveUserContext = async (email: string, context: UserContext): Promise<voi
   context.lastUpdated = new Date().toISOString();
   localStorage.setItem(key, JSON.stringify(context));
 
-  // Also persist to Firebase as part of the user's emotional memory
+  // Persist full learning context to Firebase for cross-device memory
   if (db.isDatabaseEnabled()) {
-    const contextSummary = formatContextForMemory(context);
     try {
+      await db.saveUserLearningContext(email, context as unknown as Record<string, any>);
+      // Also update the brief emotional memory summary
+      const contextSummary = formatContextForMemory(context);
       await db.updateUserMemory(email, `[AUTO-LEARN] ${contextSummary}`);
     } catch (e) {
       console.warn("LEARNING_SERVICE: Failed to persist to Firebase:", e);
     }
   }
+};
+
+/**
+ * Load user learning context from Firebase and merge with localStorage.
+ * Firebase is treated as the source of truth -- its data takes priority
+ * over localStorage when it has a more recent lastUpdated timestamp.
+ * Call this once per user session (e.g., on app boot).
+ */
+export const loadUserContextFromFirebase = async (email: string): Promise<UserContext> => {
+  const normalizedEmail = email.toLowerCase().trim();
+  
+  // Only load from Firebase once per session
+  if (firebaseContextLoaded.has(normalizedEmail)) {
+    return getUserContext(email);
+  }
+  
+  const localContext = getUserContext(email);
+  
+  if (!db.isDatabaseEnabled()) {
+    return localContext;
+  }
+  
+  try {
+    const firebaseData = await db.getUserLearningContext(email);
+    
+    if (firebaseData) {
+      const firebaseContext = { ...DEFAULT_CONTEXT, ...firebaseData } as UserContext;
+      
+      // Use whichever is more recent, or merge if Firebase has more data
+      const localTime = new Date(localContext.lastUpdated || 0).getTime();
+      const firebaseTime = new Date(firebaseContext.lastUpdated || 0).getTime();
+      
+      let merged: UserContext;
+      
+      if (firebaseTime >= localTime) {
+        // Firebase is newer or equal -- use it as base, merge any local-only data
+        merged = {
+          ...firebaseContext,
+          interests: mergeArrays(firebaseContext.interests, localContext.interests),
+          topicsDiscussed: mergeArrays(firebaseContext.topicsDiscussed, localContext.topicsDiscussed),
+          responseRules: mergeArrays(firebaseContext.responseRules, localContext.responseRules, 10),
+          knowledgeAreas: mergeArrays(firebaseContext.knowledgeAreas, localContext.knowledgeAreas),
+          learningInterests: mergeArrays(firebaseContext.learningInterests, localContext.learningInterests),
+          conversationCount: Math.max(firebaseContext.conversationCount, localContext.conversationCount),
+          satisfactionScore: firebaseContext.satisfactionScore,
+          lastUpdated: firebaseContext.lastUpdated,
+        };
+      } else {
+        // Local is newer -- use it as base, merge Firebase arrays
+        merged = {
+          ...localContext,
+          interests: mergeArrays(localContext.interests, firebaseContext.interests),
+          topicsDiscussed: mergeArrays(localContext.topicsDiscussed, firebaseContext.topicsDiscussed),
+          responseRules: mergeArrays(localContext.responseRules, firebaseContext.responseRules, 10),
+          knowledgeAreas: mergeArrays(localContext.knowledgeAreas, firebaseContext.knowledgeAreas),
+          learningInterests: mergeArrays(localContext.learningInterests, firebaseContext.learningInterests),
+          conversationCount: Math.max(localContext.conversationCount, firebaseContext.conversationCount),
+        };
+      }
+      
+      // Save merged context back to both stores
+      const storageKey = `${LEARNING_STORAGE_PREFIX}${normalizedEmail}`;
+      localStorage.setItem(storageKey, JSON.stringify(merged));
+      
+      firebaseContextLoaded.add(normalizedEmail);
+      console.log("LEARNING_SERVICE: Context loaded from Firebase and merged for", email);
+      return merged;
+    }
+  } catch (e) {
+    console.warn("LEARNING_SERVICE: Failed to load from Firebase:", e);
+  }
+  
+  firebaseContextLoaded.add(normalizedEmail);
+  return localContext;
 };
 
 /**

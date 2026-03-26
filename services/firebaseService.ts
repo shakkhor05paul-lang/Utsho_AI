@@ -231,3 +231,30 @@ export const deleteSession = async (email: string, sessionId: string) => {
   const sessionRef = doc(db, 'users', email.toLowerCase(), 'sessions', sessionId);
   await deleteDoc(sessionRef);
 };
+
+/**
+ * Save the full user learning context to Firebase.
+ * Stored as a subcollection document for structured persistence.
+ */
+export const saveUserLearningContext = async (email: string, context: Record<string, any>) => {
+  if (!db || !email) return;
+  const contextRef = doc(db, 'users', email.toLowerCase(), 'private', 'learningContext');
+  await setDoc(contextRef, { ...context, lastSynced: Timestamp.now() }, { merge: true });
+};
+
+/**
+ * Load the full user learning context from Firebase.
+ * Returns null if no context exists yet.
+ */
+export const getUserLearningContext = async (email: string): Promise<Record<string, any> | null> => {
+  if (!db || !email) return null;
+  const contextRef = doc(db, 'users', email.toLowerCase(), 'private', 'learningContext');
+  const snap = await getDoc(contextRef);
+  if (snap.exists()) {
+    const data = snap.data();
+    // Remove Firestore-specific fields before returning
+    if (data.lastSynced) delete data.lastSynced;
+    return data;
+  }
+  return null;
+};
