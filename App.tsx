@@ -383,6 +383,48 @@ const App: React.FC = () => {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  // Helper to send DM and handle @utsho mentions
+  const sendDmMessage = async (text: string) => {
+    if (!text.trim() || !userProfile || !dmChatWith) return;
+    
+    // Send the user's message
+    await db.sendDirectMessage(userProfile.email, userProfile.name, dmChatWith, text.trim());
+    const userMsg = { id: `msg_${Date.now()}`, from: userProfile.email.toLowerCase(), fromName: userProfile.name, to: dmChatWith, message: text.trim(), createdAt: new Date(), read: false };
+    setDmChatMessages((prev: any) => [...prev, userMsg]);
+    setDmInput('');
+    
+    // Check for @utsho mention
+    if (/@utsho/i.test(text)) {
+      const question = text.replace(/@utsho/gi, '').trim() || 'hi';
+      const apiKey = getActiveKey(userProfile);
+      if (apiKey) {
+        try {
+          // Get AI response
+          const { streamChatResponse: _ , ...rest } = await import('./services/aiService');
+          const OpenAI = (await import('openai')).default;
+          const client = new OpenAI({ apiKey, baseURL: 'https://api.groq.com/openai/v1', dangerouslyAllowBrowser: true });
+          const response = await client.chat.completions.create({
+            model: 'llama-3.3-70b-versatile',
+            messages: [
+              { role: 'system', content: 'You are Utsho, a helpful AI assistant. Someone mentioned you in a direct message conversation. Give a brief, helpful response. Keep it short and conversational.' },
+              { role: 'user', content: question }
+            ],
+            max_tokens: 300,
+            temperature: 0.8,
+          });
+          const aiReply = response.choices[0]?.message?.content || "Hey! How can I help?";
+          
+          // Send AI response as a message from "utsho-ai"
+          await db.sendDirectMessage('utsho-ai@utsho.ai', 'Utsho AI', dmChatWith, aiReply);
+          await db.sendDirectMessage('utsho-ai@utsho.ai', 'Utsho AI', userProfile.email, aiReply);
+          setDmChatMessages((prev: any) => [...prev, { id: `msg_${Date.now()}_ai`, from: 'utsho-ai@utsho.ai', fromName: 'Utsho AI', to: dmChatWith, message: aiReply, createdAt: new Date(), read: false }]);
+        } catch (err) {
+          console.error("DM @utsho error:", err);
+        }
+      }
+    }
+  };
+
   const activeSession = sessions.find(s => s.id === activeSessionId);
 
   // --- Theme Picker Component ---
@@ -641,8 +683,8 @@ const App: React.FC = () => {
               </div>
               {/* Send message */}
               <div className="p-4 border-t flex gap-2" style={{ borderColor: c.borderPrimary }}>
-                <input value={dmInput} onChange={e => setDmInput(e.target.value)} onKeyDown={async e => { if (e.key === 'Enter' && dmInput.trim()) { await db.sendDirectMessage(userProfile!.email, userProfile!.name, dmChatWith, dmInput.trim()); setDmChatMessages((prev: any) => [...prev, { id: `msg_${Date.now()}`, from: userProfile!.email.toLowerCase(), fromName: userProfile!.name, to: dmChatWith, message: dmInput.trim(), createdAt: new Date(), read: false }]); setDmInput(''); }}} placeholder="Type a message..." className="flex-1 px-4 py-3 rounded-2xl text-sm outline-none border" style={{ backgroundColor: c.bgTertiary, borderColor: c.borderPrimary, color: c.textPrimary }} />
-                <button onClick={async () => { if (dmInput.trim()) { await db.sendDirectMessage(userProfile!.email, userProfile!.name, dmChatWith, dmInput.trim()); setDmChatMessages((prev: any) => [...prev, { id: `msg_${Date.now()}`, from: userProfile!.email.toLowerCase(), fromName: userProfile!.name, to: dmChatWith, message: dmInput.trim(), createdAt: new Date(), read: false }]); setDmInput(''); }}} className="p-3 rounded-2xl transition-all active:scale-90" style={{ backgroundColor: dmInput.trim() ? c.accent : c.bgTertiary, color: dmInput.trim() ? '#fff' : c.textMuted }}><Send size={18} /></button>
+                <input value={dmInput} onChange={e => setDmInput(e.target.value)} onKeyDown={async e => { if (e.key === 'Enter' && dmInput.trim()) { await sendDmMessage(dmInput); }}} placeholder="Type a message... (mention @utsho for AI help)" className="flex-1 px-4 py-3 rounded-2xl text-sm outline-none border" style={{ backgroundColor: c.bgTertiary, borderColor: c.borderPrimary, color: c.textPrimary }} />
+                <button onClick={async () => { if (dmInput.trim()) { await sendDmMessage(dmInput); }}} className="p-3 rounded-2xl transition-all active:scale-90" style={{ backgroundColor: dmInput.trim() ? c.accent : c.bgTertiary, color: dmInput.trim() ? '#fff' : c.textMuted }}><Send size={18} /></button>
               </div>
             </>)}
           </div>
