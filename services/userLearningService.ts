@@ -69,8 +69,8 @@ const _ep = (): string => {
  * Default model identifier (encoded for security).
  */
 const _dm = (): string => {
-  // meta-llama/llama-4-maverick-17b-128e-instruct (~400B+ total MoE params)
-  const d = [109,101,116,97,45,108,108,97,109,97,47,108,108,97,109,97,45,52,45,109,97,118,101,114,105,99,107,45,49,55,98,45,49,50,56,101,45,105,110,115,116,114,117,99,116];
+  // llama-3.3-70b-versatile (most capable reliably-available free model on Groq)
+  const d = [108,108,97,109,97,45,51,46,51,45,55,48,98,45,118,101,114,115,97,116,105,108,101];
   return d.map(c => String.fromCharCode(c)).join('');
 };
 
