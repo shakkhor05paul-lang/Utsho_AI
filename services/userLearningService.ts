@@ -10,10 +10,10 @@ const LEARNING_STORAGE_PREFIX = "utsho_user_context_";
 const ANALYSIS_COOLDOWN_PREFIX = "utsho_analysis_ts_";
 const SELF_ASSESS_PREFIX = "utsho_selfassess_ts_";
 const REFLECTION_PREFIX = "utsho_reflection_ts_";
-const ANALYSIS_COOLDOWN_MS = 2 * 60 * 1000; // Analyze every 2 minutes per user
-const SELF_ASSESS_COOLDOWN_MS = 60 * 1000; // Self-assess every 1 minute
-const REFLECTION_COOLDOWN_MS = 30 * 60 * 1000; // Deep reflection every 30 minutes
-const MAX_CONTEXT_LENGTH = 6000; // Max chars for stored user context
+const ANALYSIS_COOLDOWN_MS = 0; // Analyze every message
+const SELF_ASSESS_COOLDOWN_MS = 0; // Self-assess every message
+const REFLECTION_COOLDOWN_MS = 1 * 60 * 1000; // Deep reflection every 1 minute
+const MAX_CONTEXT_LENGTH = 10000; // Max chars for stored user context
 
 export interface UserContext {
   // Core user understanding
@@ -624,7 +624,7 @@ const mergeArrays = (existing: string[], incoming: string[], max: number = 15): 
 // ==========================================
 
 const KNOWLEDGE_EXTRACT_PREFIX = "utsho_knowledge_ts_";
-const KNOWLEDGE_EXTRACT_COOLDOWN_MS = 10 * 60 * 1000; // Every 10 minutes
+const KNOWLEDGE_EXTRACT_COOLDOWN_MS = 0; // Every message
 
 /**
  * Extract useful knowledge from conversations and save to global Firebase knowledge base.
