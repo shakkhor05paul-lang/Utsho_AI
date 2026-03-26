@@ -618,3 +618,95 @@ const mergeArrays = (existing: string[], incoming: string[], max: number = 15): 
   // Keep last N items to prevent unbounded growth
   return combined.slice(-max);
 };
+
+// ==========================================
+// GLOBAL KNOWLEDGE EXTRACTION
+// ==========================================
+
+const KNOWLEDGE_EXTRACT_PREFIX = "utsho_knowledge_ts_";
+const KNOWLEDGE_EXTRACT_COOLDOWN_MS = 10 * 60 * 1000; // Every 10 minutes
+
+/**
+ * Extract useful knowledge from conversations and save to global Firebase knowledge base.
+ * This allows the AI to "learn from users" -- factual knowledge, tips, and corrections
+ * that users share get stored and made available to all future conversations.
+ */
+export const extractAndSaveKnowledge = async (
+  recentMessages: Message[],
+  profile: UserProfile,
+  apiKey: string
+): Promise<void> => {
+  if (!apiKey || recentMessages.length < 6) return;
+  if (!db.isDatabaseEnabled()) return;
+  if (!canRun(KNOWLEDGE_EXTRACT_PREFIX, profile.email, KNOWLEDGE_EXTRACT_COOLDOWN_MS)) return;
+
+  markRun(KNOWLEDGE_EXTRACT_PREFIX, profile.email);
+
+  const messagesToAnalyze = recentMessages.slice(-12);
+  const conversationText = messagesToAnalyze
+    .map((m) => `${m.role === "user" ? "User" : "AI"}: ${m.content.slice(0, 400)}`)
+    .join("\n");
+
+  try {
+    const client = new OpenAI({ apiKey, baseURL: _ep(), dangerouslyAllowBrowser: true });
+
+    const response = await client.chat.completions.create({
+      model: _dm(),
+      messages: [
+        {
+          role: "system",
+          content: `You are a knowledge extraction system. Analyze a conversation and extract any FACTUAL KNOWLEDGE, CORRECTIONS, or USEFUL INFORMATION shared by the user that could benefit future conversations with any user.
+
+DO NOT extract personal opinions, preferences, or emotional content (that's handled separately).
+ONLY extract verifiable facts, technical knowledge, corrections to AI mistakes, and useful tips.
+
+Return ONLY valid JSON:
+{
+  "entries": [
+    { "topic": "short topic label", "content": "concise factual knowledge (max 200 chars)" }
+  ]
+}
+
+If there's nothing worth extracting, return: { "entries": [] }
+
+Examples of good extractions:
+- User corrects a factual error the AI made
+- User shares technical knowledge about a topic
+- User teaches the AI something it didn't know
+- User provides a useful definition or explanation
+
+Max 3 entries per extraction.`,
+        },
+        {
+          role: "user",
+          content: `Conversation:\n${conversationText}\n\nExtract useful knowledge:`,
+        },
+      ],
+      temperature: 0.2,
+      max_tokens: 400,
+    });
+
+    const content = response.choices[0]?.message?.content || "";
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (parsed.entries && Array.isArray(parsed.entries)) {
+        for (const entry of parsed.entries.slice(0, 3)) {
+          if (entry.topic && entry.content) {
+            const id = `kb_auto_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+            await db.saveKnowledge(id, {
+              topic: entry.topic.slice(0, 50),
+              content: entry.content.slice(0, 200),
+              source: `learned from ${profile.name || 'user'}`,
+              createdAt: new Date(),
+            });
+            console.log("LEARNING_SERVICE: Knowledge extracted:", entry.topic);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.warn("LEARNING_SERVICE: Knowledge extraction failed (non-critical):", error);
+  }
+};

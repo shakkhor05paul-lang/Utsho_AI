@@ -3,6 +3,7 @@ import OpenAI from "openai";
 import { Message, UserProfile, ApiProvider } from "../types";
 import * as db from "./firebaseService";
 import { getUserContext, formatContextForPrompt } from "./userLearningService";
+import { formatForSystemPrompt as getAdminContext } from "./adminCommandService";
 
 // Key -> Expiry Timestamp
 const keyBlacklist = new Map<string, number>();
@@ -134,7 +135,7 @@ const createClient = (apiKey: string, profile?: UserProfile): { client: OpenAI; 
   };
 };
 
-const getSystemInstruction = (profile: UserProfile) => {
+const getSystemInstruction = async (profile: UserProfile) => {
   const email = (profile.email || "").toLowerCase().trim();
   const fullName = profile.name || "Friend";
   const firstName = fullName.split(' ')[0];
@@ -208,7 +209,7 @@ const getSystemInstruction = (profile: UserProfile) => {
     `;
   }
 
-  return `
+  const basePrompt = `
 IDENTITY: Utsho (Human Persona).
 USER: ${firstName}.
 CORE RULES: ${coreInstruction}
@@ -236,6 +237,18 @@ TECHNICAL:
 - Support Bengali/English.
 - Use [SPLIT] for message bubbles.
 `;
+
+  // Inject admin directives, knowledge base, and config from Firebase
+  try {
+    const adminContext = await getAdminContext();
+    if (adminContext) {
+      return basePrompt + adminContext;
+    }
+  } catch (e) {
+    console.warn("AI_SERVICE: Failed to load admin context:", e);
+  }
+
+  return basePrompt;
 };
 
 export const checkApiHealth = async (profile?: UserProfile): Promise<{healthy: boolean, error?: string}> => {
@@ -281,8 +294,9 @@ export const streamChatResponse = async (
     const hasImage = !!lastMsg?.imagePart;
     const selectedModel = hasImage ? visionModel : model;
 
+    const systemPrompt = await getSystemInstruction(profile);
     const messages: any[] = [
-      { role: 'system', content: getSystemInstruction(profile) },
+      { role: 'system', content: systemPrompt },
       ...history.slice(-15).map(msg => {
         if (msg.imagePart) {
           return {

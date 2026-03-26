@@ -232,6 +232,87 @@ export const deleteSession = async (email: string, sessionId: string) => {
   await deleteDoc(sessionRef);
 };
 
+// ==========================================
+// ADMIN COMMAND SYSTEM & GLOBAL KNOWLEDGE
+// ==========================================
+
+/**
+ * Save an admin directive to Firebase. Directives are global instructions
+ * that the AI follows for ALL users (e.g., personality traits, rules, greetings).
+ */
+export const saveAdminDirective = async (id: string, directive: { type: string; content: string; createdAt: Date }) => {
+  if (!db) return;
+  const ref = doc(db, 'system', 'config', 'directives', id);
+  await setDoc(ref, { ...directive, createdAt: Timestamp.fromDate(directive.createdAt) });
+};
+
+/**
+ * Remove an admin directive by ID.
+ */
+export const removeAdminDirective = async (id: string) => {
+  if (!db) return;
+  const ref = doc(db, 'system', 'config', 'directives', id);
+  await deleteDoc(ref);
+};
+
+/**
+ * Get all admin directives from Firebase.
+ */
+export const getAdminDirectives = async (): Promise<{ id: string; type: string; content: string }[]> => {
+  if (!db) return [];
+  const ref = collection(db, 'system', 'config', 'directives');
+  const snap = await getDocs(ref);
+  return snap.docs.map(d => ({ id: d.id, ...(d.data() as { type: string; content: string }) }));
+};
+
+/**
+ * Save a knowledge entry to the global knowledge base.
+ * Knowledge is learned from conversations and shared across all users.
+ */
+export const saveKnowledge = async (id: string, entry: { topic: string; content: string; source: string; createdAt: Date }) => {
+  if (!db) return;
+  const ref = doc(db, 'system', 'knowledge', 'entries', id);
+  await setDoc(ref, { ...entry, createdAt: Timestamp.fromDate(entry.createdAt) }, { merge: true });
+};
+
+/**
+ * Get all knowledge entries from the global knowledge base.
+ */
+export const getKnowledgeBase = async (): Promise<{ id: string; topic: string; content: string; source: string }[]> => {
+  if (!db) return [];
+  const ref = collection(db, 'system', 'knowledge', 'entries');
+  const snap = await getDocs(ref);
+  return snap.docs.map(d => ({ id: d.id, ...(d.data() as { topic: string; content: string; source: string }) }));
+};
+
+/**
+ * Remove a knowledge entry by ID.
+ */
+export const removeKnowledge = async (id: string) => {
+  if (!db) return;
+  const ref = doc(db, 'system', 'knowledge', 'entries', id);
+  await deleteDoc(ref);
+};
+
+/**
+ * Save admin config (global settings like greeting, personality, etc.)
+ */
+export const saveAdminConfig = async (key: string, value: string) => {
+  if (!db) return;
+  const ref = doc(db, 'system', 'config');
+  await setDoc(ref, { [key]: value }, { merge: true });
+};
+
+/**
+ * Get admin config.
+ */
+export const getAdminConfig = async (): Promise<Record<string, string>> => {
+  if (!db) return {};
+  const ref = doc(db, 'system', 'config');
+  const snap = await getDoc(ref);
+  return snap.exists() ? (snap.data() as Record<string, string>) : {};
+};
+
 /**
  * Save the full user learning context to Firebase.
  * Stored as a subcollection document for structured persistence.
